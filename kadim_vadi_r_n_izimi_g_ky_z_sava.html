@@ -1,0 +1,3264 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Kadim Vadi — Rün Çizimi &amp; Gökyüzü Savaşı</title>
+  <style>
+    :root {
+      --bg-panel: rgba(12, 18, 25, 0.86);
+      --border-panel: rgba(224, 192, 122, 0.38);
+      --gold: #eab963;
+      --cyan: #5eead4;
+      --violet: #c084fc;
+      --hp: #ef4444;
+      --hunger: #f59e0b;
+      --thirst: #38bdf8;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+    }
+
+    * { box-sizing: border-box; user-select: none; -webkit-user-select: none; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #080e10;
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color: var(--text);
+    }
+
+    #gameCanvas { display: block; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
+
+    .hud-layer { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+
+    .panel {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-panel);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-radius: 13px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.52);
+      pointer-events: auto;
+    }
+
+    /* Top Left: Vitals + Mana + Level/XP */
+    .vitals-box {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      padding: 10px 13px;
+      width: 248px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .lvl-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 11.5px;
+      font-weight: 700;
+    }
+    .lvl-pill {
+      background: linear-gradient(135deg, #d97706, #eab308);
+      color: #111827;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .xp-track { flex: 1; height: 6px; background: rgba(255, 255, 255, 0.1); border-radius: 999px; overflow: hidden; }
+    .xp-fill { height: 100%; background: linear-gradient(90deg, #eab308, #fef08a); transition: width 0.2s; }
+
+    .stat-row { display: flex; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 600; }
+    .stat-icon { width: 17px; text-align: center; font-size: 13px; }
+    .bar-track { flex: 1; height: 9px; background: rgba(255, 255, 255, 0.1); border-radius: 999px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 999px; transition: width 0.14s ease-out; }
+
+    .bar-hp { background: linear-gradient(90deg, #dc2626, #f87171); }
+    .bar-mana { background: linear-gradient(90deg, #6366f1, #a855f7, #38bdf8); }
+    .bar-hunger { background: linear-gradient(90deg, #d97706, #fbbf24); }
+    .bar-thirst { background: linear-gradient(90deg, #0284c7, #38bdf8); }
+
+    .stat-val { width: 32px; text-align: right; font-variant-numeric: tabular-nums; color: #e2e8f0; font-size: 11px; }
+
+    .status-strip {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 5px;
+      padding-top: 5px;
+      margin-top: 1px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      font-size: 10.5px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.14);
+      color: #cbd5e1;
+      font-weight: 600;
+    }
+    .badge.active { background: rgba(94, 234, 212, 0.18); color: var(--cyan); border: 1px solid rgba(94, 234, 212, 0.4); }
+    .badge.fire { background: rgba(249, 115, 22, 0.22); color: #fdba74; border: 1px solid rgba(251, 146, 60, 0.5); }
+    .badge.ice { background: rgba(56, 189, 248, 0.22); color: #bae6fd; border: 1px solid rgba(56, 189, 248, 0.5); }
+    .badge.violet { background: rgba(192, 132, 252, 0.22); color: #e9d5ff; border: 1px solid rgba(192, 132, 252, 0.5); }
+    .badge.gold { background: rgba(234, 185, 99, 0.22); color: var(--gold); border: 1px solid rgba(234, 185, 99, 0.5); }
+    .badge.dragon { background: rgba(239, 68, 68, 0.24); color: #fca5a5; border: 1px solid rgba(248, 113, 113, 0.5); }
+
+    /* Top Center */
+    .top-center {
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      max-width: min(500px, 50vw);
+      pointer-events: none;
+    }
+
+    .time-quest-pill { display: flex; align-items: center; gap: 10px; padding: 7px 14px; font-size: 12px; white-space: nowrap; pointer-events: auto; }
+    .time-badge { font-weight: 700; color: var(--gold); }
+    .divider-v { width: 1px; height: 14px; background: rgba(255, 255, 255, 0.16); }
+    .quest-text { color: #e2e8f0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; max-width: 280px; }
+
+    .boss-bar-wrap {
+      width: min(420px, 82vw);
+      padding: 8px 14px;
+      display: none;
+      flex-direction: column;
+      gap: 5px;
+      border-color: rgba(239, 68, 68, 0.58);
+      background: rgba(26, 11, 14, 0.9);
+    }
+    .boss-bar-wrap.visible { display: flex; }
+    .boss-header { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; color: #fca5a5; letter-spacing: 0.04em; }
+    .boss-track { height: 12px; background: rgba(0, 0, 0, 0.55); border-radius: 999px; overflow: hidden; border: 1px solid rgba(248, 113, 113, 0.35); }
+    .boss-fill { height: 100%; background: linear-gradient(90deg, #991b1b, #ef4444, #f97316); transition: width 0.14s ease-out; }
+
+    /* Top Right */
+    .top-right { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; align-items: flex-end; gap: 7px; }
+    .minimap-wrap { padding: 6px; border-radius: 14px; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+    #minimapCanvas { border-radius: 10px; display: block; background: #102018; border: 1px solid rgba(255, 255, 255, 0.08); }
+    .minimap-legend { display: grid; grid-template-columns: repeat(3, auto); gap: 3px 7px; font-size: 9.5px; color: var(--muted); }
+    .legend-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 3px; vertical-align: middle; }
+
+    .icon-btn-row { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; pointer-events: auto; }
+    .hud-btn {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-panel);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 6px 10px;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: background 0.15s, border-color 0.15s, transform 0.1s;
+    }
+    .hud-btn:hover { background: rgba(30, 41, 52, 0.96); border-color: var(--gold); }
+    .hud-btn:active { transform: scale(0.96); }
+
+    /* Bottom Dock */
+    .bottom-dock {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 7px;
+      max-width: 98vw;
+    }
+    .prompt-row { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; justify-content: center; }
+
+    .interact-prompt, .flight-pill {
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+      pointer-events: auto;
+      cursor: pointer;
+    }
+    .interact-prompt { background: rgba(15, 23, 30, 0.94); border: 1px solid var(--gold); color: var(--gold); }
+    .flight-pill { background: rgba(32, 14, 16, 0.94); border: 1px solid #f87171; color: #fecaca; }
+    .interact-prompt.visible, .flight-pill.visible { display: inline-flex; }
+
+    .hotbar { display: flex; align-items: center; gap: 5px; padding: 6px 8px; }
+    .slot {
+      width: 52px;
+      height: 52px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s, transform 0.1s;
+    }
+    .slot:hover { border-color: var(--gold); background: rgba(234, 185, 99, 0.12); }
+    .slot.active { border-color: var(--cyan); background: rgba(94, 234, 212, 0.16); box-shadow: 0 0 12px rgba(94, 234, 212, 0.25); }
+    .slot.active-violet { border-color: var(--violet); background: rgba(192, 132, 252, 0.22); box-shadow: 0 0 14px rgba(192, 132, 252, 0.35); }
+    .slot.active-gold { border-color: var(--gold); background: rgba(234, 185, 99, 0.24); box-shadow: 0 0 14px rgba(234, 185, 99, 0.4); }
+    .slot.active-fire { border-color: #fb923c; background: rgba(249, 115, 22, 0.22); }
+    .slot.active-ice { border-color: #38bdf8; background: rgba(56, 189, 248, 0.22); }
+    .slot.locked { opacity: 0.42; }
+    .slot-key { position: absolute; top: 3px; left: 5px; font-size: 9px; font-weight: 700; color: var(--muted); }
+    .slot-count { position: absolute; bottom: 2px; right: 5px; font-size: 10px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px #000; }
+    .slot-icon { font-size: 19px; line-height: 1; }
+    .slot-label { font-size: 8.5px; color: #cbd5e1; margin-top: 2px; max-width: 48px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Toast Notifications */
+    .toast-stack { position: absolute; top: 72px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; z-index: 25; width: min(500px, 92vw); }
+    .toast { background: rgba(13, 20, 26, 0.94); border: 1px solid var(--border-panel); color: #f8fafc; padding: 8px 16px; border-radius: 10px; font-size: 13px; font-weight: 500; text-align: center; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.48); animation: toastIn 0.22s ease-out; }
+    .toast.gold { border-color: var(--gold); color: #fef3c7; }
+    .toast.danger { border-color: #f87171; color: #fecaca; }
+    .toast.cyan { border-color: var(--cyan); color: #ccfbf1; }
+    .toast.violet { border-color: var(--violet); color: #f3e8ff; }
+
+    @keyframes toastIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Modals */
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(5, 9, 13, 0.72); backdrop-filter: blur(5px); display: none; align-items: center; justify-content: center; z-index: 40; padding: 16px; }
+    .modal-backdrop.open { display: flex; }
+
+    .modal-card {
+      width: min(580px, 95vw);
+      max-height: 86vh;
+      overflow-y: auto;
+      padding: 20px 22px;
+      background: rgba(14, 20, 27, 0.97);
+      border: 1px solid rgba(234, 185, 99, 0.45);
+      border-radius: 16px;
+      box-shadow: 0 22px 54px rgba(0, 0, 0, 0.75);
+    }
+
+    .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+    .modal-head h2 { font-size: 18px; color: var(--gold); display: flex; align-items: center; gap: 8px; }
+    .close-btn { background: rgba(255, 255, 255, 0.08); border: none; color: #cbd5e1; width: 30px; height: 30px; border-radius: 8px; cursor: pointer; font-size: 16px; }
+    .close-btn:hover { background: rgba(255, 255, 255, 0.18); color: #fff; }
+
+    .materials-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-bottom: 14px; }
+    .mat-pill { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; font-size: 12px; }
+    .mat-pill strong { color: var(--gold); font-size: 14px; }
+
+    .recipe-list { display: flex; flex-direction: column; gap: 10px; }
+    .recipe-card { background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .recipe-info h3 { font-size: 14px; color: #f8fafc; margin-bottom: 3px; }
+    .recipe-info p { font-size: 12px; color: var(--muted); line-height: 1.4; }
+    .recipe-cost { margin-top: 5px; font-size: 11px; color: var(--gold); font-weight: 600; }
+
+    .craft-btn {
+      padding: 8px 14px;
+      border-radius: 9px;
+      border: 1px solid var(--gold);
+      background: linear-gradient(180deg, rgba(234, 185, 99, 0.28), rgba(168, 138, 75, 0.25));
+      color: #fef3c7;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .craft-btn:hover:not(:disabled) { background: linear-gradient(180deg, rgba(234, 185, 99, 0.45), rgba(168, 138, 75, 0.35)); }
+    .craft-btn:disabled { opacity: 0.4; cursor: not-allowed; border-color: rgba(255, 255, 255, 0.18); }
+
+    .perk-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 10px; margin-top: 8px; }
+    .perk-card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(234, 185, 99, 0.35);
+      border-radius: 12px;
+      padding: 14px 12px;
+      text-align: center;
+      cursor: pointer;
+      transition: transform 0.14s, border-color 0.14s, background 0.14s;
+    }
+    .perk-card:hover { transform: translateY(-3px); border-color: var(--gold); background: rgba(234, 185, 99, 0.14); }
+    .perk-icon { font-size: 28px; margin-bottom: 6px; }
+    .perk-title { font-size: 13.5px; font-weight: 700; color: var(--gold); margin-bottom: 4px; }
+    .perk-desc { font-size: 11.5px; color: #cbd5e1; line-height: 1.4; }
+
+    .npc-quote { background: rgba(255, 255, 255, 0.05); border-left: 3px solid var(--gold); padding: 12px 14px; border-radius: 8px; font-size: 13.5px; line-height: 1.55; color: #e2e8f0; margin-bottom: 14px; }
+    .seal-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.09); margin-bottom: 8px; font-size: 13px; }
+    .seal-row.done { border-color: rgba(74, 222, 128, 0.5); background: rgba(74, 222, 128, 0.1); }
+
+    /* Start & End Overlays */
+    .full-overlay { position: fixed; inset: 0; background: radial-gradient(circle at center, rgba(16, 30, 26, 0.8), rgba(7, 11, 14, 0.95)); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+    .full-overlay.hidden { display: none; }
+    .hero-card { width: min(600px, 95vw); padding: 26px; text-align: center; background: rgba(13, 20, 26, 0.96); border: 1px solid rgba(234, 185, 99, 0.48); border-radius: 20px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.78); }
+    .hero-eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--cyan); font-weight: 700; margin-bottom: 6px; }
+    .hero-title { font-size: 32px; font-weight: 800; color: var(--gold); margin-bottom: 10px; letter-spacing: -0.02em; }
+    .hero-desc { font-size: 13.5px; color: #cbd5e1; line-height: 1.55; margin-bottom: 16px; }
+    .controls-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; text-align: left; margin-bottom: 18px; }
+    .ctrl-item { background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 7px 10px; font-size: 11.5px; color: #e2e8f0; }
+    .ctrl-item kbd { display: inline-block; background: rgba(234, 185, 99, 0.2); border: 1px solid rgba(234, 185, 99, 0.45); color: var(--gold); border-radius: 5px; padding: 1px 6px; font-size: 10.5px; font-weight: 700; margin-right: 5px; }
+
+    .primary-cta { width: 100%; padding: 13px 20px; border-radius: 12px; border: none; background: linear-gradient(135deg, #d97706, #eab308); color: #111827; font-size: 15px; font-weight: 800; cursor: pointer; box-shadow: 0 8px 24px rgba(234, 179, 8, 0.35); }
+    .primary-cta:hover { filter: brightness(1.08); transform: translateY(-1px); }
+
+    /* Mobile Touch Controls */
+    .touch-controls { position: fixed; inset: 0; pointer-events: none; z-index: 15; display: none; }
+    @media (pointer: coarse) { .touch-controls { display: block; } }
+    .joystick-zone { position: absolute; bottom: 92px; left: 20px; width: 112px; height: 112px; border-radius: 50%; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.2); pointer-events: auto; touch-action: none; }
+    .joystick-knob { position: absolute; top: 50%; left: 50%; width: 42px; height: 42px; margin: -21px 0 0 -21px; border-radius: 50%; background: rgba(234, 185, 99, 0.55); border: 2px solid var(--gold); }
+    .touch-actions { position: absolute; bottom: 94px; right: 16px; display: flex; flex-direction: column; gap: 9px; pointer-events: auto; }
+    .touch-btn { width: 50px; height: 50px; border-radius: 50%; background: rgba(15, 22, 28, 0.86); border: 2px solid var(--gold); color: #fff; font-size: 17px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+
+    @media (max-width: 760px) {
+      .vitals-box { width: 192px; padding: 8px 10px; }
+      .top-center { top: auto; bottom: 82px; max-width: 92vw; }
+      .minimap-wrap { display: none; }
+      .slot { width: 40px; height: 40px; }
+      .slot-icon { font-size: 15px; }
+      .controls-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- HUD Layer -->
+  <div class="hud-layer">
+    <!-- Top Left: Level + Vitals + Mana -->
+    <div class="panel vitals-box">
+      <div class="lvl-row">
+        <span id="lvlPill" class="lvl-pill">Sv. 1</span>
+        <div class="xp-track"><div id="xpFill" class="xp-fill" style="width:0%"></div></div>
+        <span id="xpVal" style="font-size:10px; color:#cbd5e1;">0/100</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-icon">❤️</span>
+        <div class="bar-track"><div id="hpBar" class="bar-fill bar-hp" style="width:100%"></div></div>
+        <span id="hpVal" class="stat-val">100</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-icon">✨</span>
+        <div class="bar-track"><div id="manaBar" class="bar-fill bar-mana" style="width:100%"></div></div>
+        <span id="manaVal" class="stat-val">100</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-icon">🍖</span>
+        <div class="bar-track"><div id="hungerBar" class="bar-fill bar-hunger" style="width:100%"></div></div>
+        <span id="hungerVal" class="stat-val">100</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-icon">💧</span>
+        <div class="bar-track"><div id="thirstBar" class="bar-fill bar-thirst" style="width:100%"></div></div>
+        <span id="thirstVal" class="stat-val">100</span>
+      </div>
+      <div class="status-strip">
+        <span id="armorBadge" class="badge">🛡️ %0</span>
+        <span id="gauntletBadge" class="badge active">⚡ Arkana</span>
+        <span id="mountBadge" class="badge dragon" style="display:none">🐉 Ejderha</span>
+      </div>
+    </div>
+
+    <!-- Top Center -->
+    <div class="top-center">
+      <div class="panel time-quest-pill">
+        <span id="timeBadge" class="time-badge">☀️ Gün 1 • Gündüz</span>
+        <span class="divider-v"></span>
+        <span id="questText" class="quest-text">Mühürler (0/3) • Antik Harabe'deki Borozan'ı bul</span>
+      </div>
+      <div id="bossBarWrap" class="panel boss-bar-wrap">
+        <div class="boss-header">
+          <span id="bossNameText">🐸 KADİM BATAKLIK KURBAĞASI</span>
+          <span id="bossHpText">600 / 600</span>
+        </div>
+        <div class="boss-track"><div id="bossHpFill" class="boss-fill" style="width:100%"></div></div>
+      </div>
+    </div>
+
+    <!-- Top Right -->
+    <div class="top-right">
+      <div class="panel minimap-wrap">
+        <canvas id="minimapCanvas" width="150" height="150"></canvas>
+        <div class="minimap-legend">
+          <span><i class="legend-dot" style="background:#f59e0b"></i>Kamp/Köy</span>
+          <span><i class="legend-dot" style="background:#facc15"></i>Harabe</span>
+          <span><i class="legend-dot" style="background:#a855f7"></i>Sunak</span>
+          <span><i class="legend-dot" style="background:#ef4444"></i>Volkan</span>
+          <span><i class="legend-dot" style="background:#e0f2fe"></i>Buzul</span>
+          <span><i class="legend-dot" style="background:#e879f9"></i>Tılsım</span>
+        </div>
+      </div>
+      <div class="icon-btn-row">
+        <button id="journalOpenBtn" class="hud-btn" type="button">📜 Hikaye (J)</button>
+        <button id="craftOpenBtn" class="hud-btn" type="button">⚒️ Üretim (C)</button>
+        <button id="muteBtn" class="hud-btn" type="button">🔊 Ses</button>
+      </div>
+    </div>
+
+    <!-- Toast Stack -->
+    <div id="toastStack" class="toast-stack"></div>
+
+    <!-- Bottom Dock -->
+    <div class="bottom-dock">
+      <div class="prompt-row">
+        <button id="interactPrompt" class="interact-prompt" type="button">E — Etkileşim</button>
+        <button id="flightToggleBtn" class="flight-pill" type="button">🐉 Shift — Yüksek Uçuş / İniş</button>
+      </div>
+      <div class="panel hotbar" id="hotbar">
+        <div class="slot" data-slot="1" title="Orman Meyvesi Ye (1)">
+          <span class="slot-key">1</span><span class="slot-icon">🫐</span><span class="slot-label">Meyve</span><span id="cntBerry" class="slot-count">3</span>
+        </div>
+        <div class="slot" data-slot="2" title="Su Matarası İç (2)">
+          <span class="slot-key">2</span><span class="slot-icon">🧪</span><span class="slot-label">Su</span><span id="cntWater" class="slot-count">2</span>
+        </div>
+        <div class="slot" data-slot="3" title="Pişmiş Et Ye (3)">
+          <span class="slot-key">3</span><span class="slot-icon">🍗</span><span class="slot-label">Et</span><span id="cntMeat" class="slot-count">0</span>
+        </div>
+        <div class="slot locked" id="slotHelmet" data-slot="4" title="Demir Kask Tak / Çıkar (4)">
+          <span class="slot-key">4</span><span class="slot-icon">🪖</span><span class="slot-label">Kask</span><span id="cntHelmet" class="slot-count">0</span>
+        </div>
+        <div class="slot locked" id="slotHorn" data-slot="5" title="Kadim Borozan Üfle (5 / R)">
+          <span class="slot-key">5</span><span class="slot-icon">📯</span><span class="slot-label">Borozan</span><span id="cntHorn" class="slot-count">0</span>
+        </div>
+        <div class="slot" data-slot="6" title="Çadır Kur (6)">
+          <span class="slot-key">6</span><span class="slot-icon">⛺</span><span class="slot-label">Çadır</span><span id="cntTent" class="slot-count">0</span>
+        </div>
+        <div class="slot" id="slotTele" data-slot="7" title="Tılsımlı Parçacık Telekinezisi (Q)">
+          <span class="slot-key">Q</span><span class="slot-icon">🔮</span><span class="slot-label">Telekinezi</span><span class="slot-count">✦</span>
+        </div>
+        <div class="slot" id="slotDraw" data-slot="8" title="Haritada Rün Çizimi: Basılı Tut & Çiz (Z)">
+          <span class="slot-key">Z</span><span class="slot-icon">✍️</span><span class="slot-label">Rün Çiz</span><span class="slot-count">⚡</span>
+        </div>
+        <div class="slot" id="slotElem" data-slot="9" title="Element Değiştir: Arkana / Ateş / Buz (G)">
+          <span class="slot-key">G</span><span id="elemIcon" class="slot-icon">⚡</span><span id="elemLabel" class="slot-label">Arkana</span><span id="cntElem" class="slot-count">1</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile Touch Controls -->
+  <div class="touch-controls">
+    <div id="joystickZone" class="joystick-zone"><div id="joystickKnob" class="joystick-knob"></div></div>
+    <div class="touch-actions">
+      <button id="touchShootBtn" class="touch-btn" type="button" title="Büyü / Alev">✨</button>
+      <button id="touchDashBtn" class="touch-btn" type="button" title="Atılma / Havada Sıyrıl">💨</button>
+      <button id="touchMountBtn" class="touch-btn" type="button" title="Ejderhaya Bin/İn">🐉</button>
+      <button id="touchHornBtn" class="touch-btn" type="button" title="Borozan Üfle">📯</button>
+    </div>
+  </div>
+
+  <!-- Crafting Modal -->
+  <div id="craftModal" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>🎒 Envanter &amp; Üretim</h2>
+        <button id="craftCloseBtn" class="close-btn" type="button">✕</button>
+      </div>
+      <div class="materials-grid">
+        <div class="mat-pill"><span>🪵 Odun</span><strong id="matWood">0</strong></div>
+        <div class="mat-pill"><span>🪨 Demir/Taş</span><strong id="matStone">0</strong></div>
+        <div class="mat-pill"><span>✨ Öz</span><strong id="matEssence">0</strong></div>
+        <div class="mat-pill"><span>🫐 Meyve</span><strong id="matBerry">3</strong></div>
+      </div>
+      <div class="recipe-list">
+        <div class="recipe-card">
+          <div class="recipe-info">
+            <h3>🪖 Demir Şövalye Kaskı</h3>
+            <p>Karakterinin kafasında görünür. Gelen tüm hasarı <strong>%45 azaltır</strong>.</p>
+            <div class="recipe-cost">Gereken: 5 Demir/Taş • 3 Odun</div>
+          </div>
+          <button id="btnCraftHelmet" class="craft-btn" type="button">Üret</button>
+        </div>
+        <div class="recipe-card">
+          <div class="recipe-info">
+            <h3>⛺ Kamp Çadırı</h3>
+            <p>Gece etrafı aydınlatır, can ve büyü yeniler, yaratıkları uzak tutar.</p>
+            <div class="recipe-cost">Gereken: 6 Odun • 3 Demir/Taş</div>
+          </div>
+          <button id="btnCraftTent" class="craft-btn" type="button">Üret</button>
+        </div>
+        <div class="recipe-card">
+          <div class="recipe-info">
+            <h3>🧪 Şifa &amp; Büyü İksiri</h3>
+            <p>Anında +55 Can, +60 Büyü Enerjisi ve +35 Susuzluk yeniler.</p>
+            <div class="recipe-cost">Gereken: 3 Meyve • 2 Yaratık Özü</div>
+          </div>
+          <button id="btnCraftPotion" class="craft-btn" type="button">Üret &amp; İç</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Level Up Perk Picker Modal -->
+  <div id="levelModal" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="lvlUpTitle">⭐ SEVİYE ATLADIN!</h2>
+      </div>
+      <p style="font-size:13px; color:#cbd5e1; margin-bottom:10px;">
+        Yeni seviyenle birlikte vadideki yaratıklar güçlendi ve rünlü elitler uyanıyor. Kalıcı bir yetenek seç:
+      </p>
+      <div id="perkGrid" class="perk-grid"></div>
+    </div>
+  </div>
+
+  <!-- Story & Quest Journal Modal -->
+  <div id="journalModal" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2>📜 Üç Kadim Mühür — Hikaye Günlüğü</h2>
+        <button id="journalCloseBtn" class="close-btn" type="button">✕</button>
+      </div>
+      <div class="npc-quote">
+        Kadim Vadi'yi koruyan <strong>Üç Element Mührü</strong> kırıldı. Gökyüzünde <strong>Fırtına Harpileri</strong> ve <strong>Gökyüzü Gözcüleri</strong> avlanıyor. Seviye atlayıp güçlen, <strong>Rün Çizimi (Z)</strong> ve <strong>Tılsımlı Parçacık (Q)</strong> ustalığınla üç büyük koruyucuyu yen!
+      </div>
+      <div id="sealList"></div>
+    </div>
+  </div>
+
+  <!-- NPC Dialogue Modal -->
+  <div id="npcModal" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="npcNameTitle">🧙 Bilge Aldor</h2>
+        <button id="npcCloseBtn" class="close-btn" type="button">✕</button>
+      </div>
+      <div id="npcDialogueBody" class="npc-quote"></div>
+      <div id="npcActions" class="recipe-list"></div>
+    </div>
+  </div>
+
+  <!-- Start Overlay -->
+  <div id="startOverlay" class="full-overlay">
+    <div class="hero-card">
+      <div class="hero-eyebrow">2D Açık Dünya RPG • Rün Çizimi &amp; Gökyüzü Savaşı</div>
+      <h1 class="hero-title">KADİM VADİ</h1>
+      <p class="hero-desc">
+        <strong>Z</strong> tuşuyla haritada fareyi sürükleyip kendi <strong>Rün Hattını / Alev Çemberini</strong> çiz!
+        Seviye atladıkça rünlü elit canavarlar ve <strong>havadaki Ejderhana saldıran</strong> Fırtına Harpileri uyanır. Ejderhanla (<strong>F</strong>) uç, havada <strong>Space</strong> ile sıyrıl ve üç büyük Boss'u yen!
+      </p>
+      <div class="controls-grid">
+        <div class="ctrl-item"><kbd>WASD</kbd> Hareket • <kbd>Space</kbd> Atılma / Havada Sıyrıl</div>
+        <div class="ctrl-item"><kbd>Z + Sürükle</kbd> Haritada Çizerek Büyü Yap (Çember bonusu!)</div>
+        <div class="ctrl-item"><kbd>Q</kbd> Tılsımlı Parçacık • <kbd>Sağ Tık</kbd> Geri Çağır / Kalkan</div>
+        <div class="ctrl-item"><kbd>F / Shift</kbd> Ejderha Bin &amp; Yüksek Uçuş • <kbd>Sol Tık</kbd> Alev</div>
+        <div class="ctrl-item"><kbd>G</kbd> Element Değiştir (Arkana / Ateş / Buz)</div>
+        <div class="ctrl-item"><kbd>E / R / C / J</kbd> Mağara-NPC • Borozan • Üretim • Hikaye</div>
+      </div>
+      <button id="startGameBtn" class="primary-cta" type="button">Maceraya Başla</button>
+    </div>
+  </div>
+
+  <!-- End Overlay -->
+  <div id="endOverlay" class="full-overlay hidden">
+    <div class="hero-card">
+      <div id="endEyebrow" class="hero-eyebrow">ZAFER</div>
+      <h1 id="endTitle" class="hero-title">ÜÇ MÜHÜR TAMAMLANDI!</h1>
+      <p id="endDesc" class="hero-desc"></p>
+      <div style="display:flex; gap:10px;">
+        <button id="continueBtn" class="hud-btn" style="flex:1; justify-content:center; padding:12px;" type="button">Keşfe Devam Et</button>
+        <button id="restartBtn" class="primary-cta" style="flex:1;" type="button">Yeniden Başla</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    'use strict';
+
+    // ==================== CANVAS & CONTEXTS ====================
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const miniCanvas = document.getElementById('minimapCanvas');
+    const miniCtx = miniCanvas.getContext('2d');
+    const lightCanvas = document.createElement('canvas');
+    const lightCtx = lightCanvas.getContext('2d');
+
+    let viewW = window.innerWidth;
+    let viewH = window.innerHeight;
+    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    function resizeCanvas() {
+      viewW = window.innerWidth;
+      viewH = window.innerHeight;
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(viewW * dpr);
+      canvas.height = Math.floor(viewH * dpr);
+      canvas.style.width = viewW + 'px';
+      canvas.style.height = viewH + 'px';
+      lightCanvas.width = Math.max(1, Math.floor(viewW / 2));
+      lightCanvas.height = Math.max(1, Math.floor(viewH / 2));
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // ==================== SYNCHRONIZED WEB AUDIO ====================
+    const AudioEngine = {
+      ctx: null,
+      muted: false,
+      init() {
+        if (!this.ctx) {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (AC) this.ctx = new AC();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+      },
+      playTone(type, f1, f2, dur, vol = 0.12, delay = 0) {
+        if (this.muted || !this.ctx) return;
+        const now = this.ctx.currentTime + delay;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(f1, now);
+        osc.frequency.exponentialRampToValueAtTime(Math.max(20, f2), now + dur);
+        gain.gain.setValueAtTime(vol, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + dur + 0.02);
+      },
+      playMagicShot(elem = 'arcane') {
+        if (elem === 'fire') { this.playTone('sawtooth', 320, 90, 0.18, 0.11); this.playTone('triangle', 620, 210, 0.14, 0.08); }
+        else if (elem === 'ice') { this.playTone('sine', 1120, 680, 0.15, 0.1); this.playTone('triangle', 1480, 920, 0.12, 0.07, 0.03); }
+        else this.playTone('triangle', 690, 240, 0.14, 0.12);
+      },
+      playDrawTick(pitch) { this.playTone('sine', 420 + pitch * 18, 460 + pitch * 18, 0.05, 0.045); },
+      playRuneIgnite(elem, isCircle) {
+        if (elem === 'fire') { this.playTone('sawtooth', 180, 65, 0.38, 0.18); this.playTone('triangle', 480, 140, 0.3, 0.1); }
+        else if (elem === 'ice') { this.playTone('sine', 1200, 420, 0.32, 0.14); this.playTone('triangle', 1650, 800, 0.25, 0.09, 0.04); }
+        else { this.playTone('sawtooth', 620, 160, 0.28, 0.15); this.playTone('sine', 960, 320, 0.24, 0.1, 0.04); }
+        if (isCircle) { this.playTone('sine', 523, 1046, 0.45, 0.14, 0.05); }
+      },
+      playDragonFlame() {
+        if (this.muted || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const len = Math.floor(this.ctx.sampleRate * 0.15);
+        const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * 0.6;
+        const src = this.ctx.createBufferSource(); src.buffer = buf;
+        const flt = this.ctx.createBiquadFilter(); flt.type = 'bandpass'; flt.frequency.setValueAtTime(420, now);
+        const g = this.ctx.createGain(); g.gain.setValueAtTime(0.15, now); g.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+        src.connect(flt); flt.connect(g); g.connect(this.ctx.destination); src.start(now);
+      },
+      playLevelUp() {
+        [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => this.playTone('triangle', f, f * 1.03, 0.26, 0.14, i * 0.08));
+      },
+      playDash() { this.playTone('sine', 440, 140, 0.16, 0.12); this.playTone('triangle', 840, 260, 0.12, 0.07); },
+      playShield() { this.playTone('sine', 520, 1040, 0.22, 0.12); },
+      playTeleLift() { this.playTone('sine', 240, 620, 0.28, 0.14); },
+      playTeleThrow() { this.playTone('triangle', 520, 110, 0.24, 0.17); },
+      playTeleRecall() { this.playTone('sine', 300, 920, 0.26, 0.14); },
+      playWingFlap() { this.playTone('sine', 135, 48, 0.28, 0.15); },
+      playCaveEnter() { this.playTone('sine', 280, 90, 0.42, 0.15); },
+      playHit(heavy = false) { this.playTone(heavy ? 'sawtooth' : 'square', heavy ? 150 : 220, 52, heavy ? 0.22 : 0.1, heavy ? 0.17 : 0.08); },
+      playPickup() { [523.25, 659.25, 783.99].forEach((f, i) => this.playTone('sine', f, f * 1.02, 0.14, 0.1, i * 0.055)); },
+      playHorn() {
+        if (this.muted || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        [146.83, 220, 293.66, 440].forEach((f, idx) => {
+          const osc = this.ctx.createOscillator(), g = this.ctx.createGain(), flt = this.ctx.createBiquadFilter();
+          osc.type = idx % 2 === 0 ? 'sawtooth' : 'triangle';
+          osc.frequency.setValueAtTime(f * 0.96, now); osc.frequency.linearRampToValueAtTime(f, now + 0.18);
+          osc.frequency.setValueAtTime(f, now + 1.15); osc.frequency.linearRampToValueAtTime(f * 0.94, now + 1.6);
+          flt.type = 'lowpass'; flt.frequency.setValueAtTime(900, now);
+          const vol = idx === 0 ? 0.14 : 0.06;
+          g.gain.setValueAtTime(0.001, now); g.gain.linearRampToValueAtTime(vol, now + 0.18);
+          g.gain.setValueAtTime(vol, now + 1.1); g.gain.exponentialRampToValueAtTime(0.001, now + 1.65);
+          osc.connect(flt); flt.connect(g); g.connect(this.ctx.destination);
+          osc.start(now); osc.stop(now + 1.7);
+        });
+      },
+      playBossRoar() { this.playTone('sawtooth', 105, 48, 0.55, 0.22); },
+      playSlam() { this.playTone('sine', 130, 26, 0.4, 0.3); }
+    };
+
+    // ==================== WORLD CONSTANTS ====================
+    const WORLD_SIZE = 5200;
+    const CENTER = WORLD_SIZE / 2;
+    const CAVE_W = 1100;
+    const CAVE_H = 820;
+    const DAY_LENGTH = 125;
+
+    function mulberry32(seed) {
+      let a = seed >>> 0;
+      return function () {
+        a |= 0; a = (a + 0x6D2B79F5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    // ==================== GAME STATE ====================
+    let state = null;
+    let rafId = null;
+    let lastTime = 0;
+
+    const keys = {};
+    const mouse = { x: viewW / 2, y: viewH / 2, down: false };
+    const touchStick = { active: false, dx: 0, dy: 0, id: null, cx: 0, cy: 0 };
+
+    function screenToWorld(sx, sy) {
+      const z = state ? state.cameraZoom : 1;
+      const p = state.player;
+      return { x: p.x + (sx - viewW / 2) / z, y: p.y + (sy - viewH / 2) / z };
+    }
+
+    const RUNE_TYPES = [
+      { id: 'fire', icon: '🔥', color: '#f97316', label: 'Alev' },
+      { id: 'armor', icon: '🛡️', color: '#eab308', label: 'Zırh' },
+      { id: 'haste', icon: '⚡', color: '#facc15', label: 'Hız' },
+      { id: 'frost', icon: '❄️', color: '#38bdf8', label: 'Buz' }
+    ];
+
+    function createInitialState() {
+      const rand = mulberry32(Math.floor(Date.now() % 100000) + 521);
+
+      const campPos = { x: CENTER, y: CENTER };
+
+      const villages = [
+        {
+          id: 'sogutlu', name: 'Söğütlü Köyü', x: CENTER + 560, y: CENTER + 460, radius: 260,
+          houses: [
+            { x: CENTER + 450, y: CENTER + 370, w: 78, h: 58, roof: '#9a3412' },
+            { x: CENTER + 660, y: CENTER + 380, w: 82, h: 60, roof: '#b45309' },
+            { x: CENTER + 540, y: CENTER + 575, w: 88, h: 62, roof: '#7c2d12' }
+          ],
+          fountain: { x: CENTER + 560, y: CENTER + 460 }
+        },
+        {
+          id: 'taskopru', name: 'Taşköprü Kasabası', x: CENTER - 740, y: CENTER + 180, radius: 290,
+          houses: [
+            { x: CENTER - 865, y: CENTER + 90, w: 90, h: 64, roof: '#475569' },
+            { x: CENTER - 635, y: CENTER + 85, w: 86, h: 60, roof: '#334155' },
+            { x: CENTER - 840, y: CENTER + 285, w: 92, h: 62, roof: '#64748b' },
+            { x: CENTER - 630, y: CENTER + 280, w: 84, h: 60, roof: '#475569' }
+          ],
+          fountain: { x: CENTER - 740, y: CENTER + 180 }
+        }
+      ];
+
+      const npcs = [
+        { id: 'aldor', name: 'Bilge Aldor', role: 'Köy Bilgesi', icon: '🧙', x: CENTER + 515, y: CENTER + 430, color: '#6366f1' },
+        { id: 'mira', name: 'Avcı Mira', role: 'İz Sürücü', icon: '🏹', x: CENTER + 615, y: CENTER + 495, color: '#16a34a' },
+        { id: 'boran', name: 'Demirci Boran', role: 'Tüccar & Usta', icon: '⚒️', x: CENTER - 705, y: CENTER + 145, color: '#ea580c' }
+      ];
+
+      const volcanoPos = { x: CENTER - 1380, y: CENTER - 1280, radius: 370 };
+      const snowPos = { x: CENTER + 1150, y: CENTER - 1350, radius: 680 };
+      const geyserBasin = { x: CENTER + 1180, y: CENTER - 380, radius: 270 };
+      const ruinsPos = { x: CENTER + 1580, y: CENTER + 460 };
+      const altarPos = { x: CENTER - 960, y: CENTER + 1360 };
+
+      const worldRunes = [
+        { id: 'fire', name: 'Ateş Rünü', x: volcanoPos.x + 310, y: volcanoPos.y + 190, color: '#f97316', collected: false },
+        { id: 'ice', name: 'Buz Rünü', x: geyserBasin.x + 20, y: geyserBasin.y - 160, color: '#38bdf8', collected: false }
+      ];
+
+      const geysers = [
+        { x: geyserBasin.x - 100, y: geyserBasin.y - 45, r: 34, timer: 1.5, period: 6.5, eruptDur: 2.3, erupting: 0 },
+        { x: geyserBasin.x + 90, y: geyserBasin.y - 55, r: 30, timer: 3.8, period: 7.2, eruptDur: 2.4, erupting: 0 },
+        { x: geyserBasin.x + 15, y: geyserBasin.y + 90, r: 38, timer: 5.1, period: 6.0, eruptDur: 2.6, erupting: 0 }
+      ];
+
+      const caves = [
+        { id: 'cave_amethyst', name: 'Ametist Mağarası', x: CENTER - 480, y: CENTER - 460, r: 62, crystalColor: '#c084fc' },
+        { id: 'cave_sapphire', name: 'Safir Mağarası', x: CENTER + 760, y: CENTER - 920, r: 60, crystalColor: '#38bdf8' },
+        { id: 'cave_amber', name: 'Kehribar Mağarası', x: CENTER - 1180, y: CENTER + 680, r: 64, crystalColor: '#f59e0b' }
+      ];
+
+      const lakes = [
+        { x: CENTER + 310, y: CENTER - 210, rx: 120, ry: 82 },
+        { x: CENTER - 580, y: CENTER + 690, rx: 145, ry: 100 },
+        { x: CENTER + 1020, y: CENTER + 1080, rx: 160, ry: 105 },
+        { x: altarPos.x, y: altarPos.y, rx: 280, ry: 220, isSwamp: true }
+      ];
+
+      function blocked(x, y, pad = 38) {
+        if (Math.hypot(x - volcanoPos.x, y - volcanoPos.y) < volcanoPos.radius + pad) return true;
+        if (Math.hypot(x - geyserBasin.x, y - geyserBasin.y) < geyserBasin.radius + pad) return true;
+        for (const v of villages) if (Math.hypot(x - v.x, y - v.y) < v.radius + pad) return true;
+        for (const c of caves) if (Math.hypot(x - c.x, y - c.y) < c.r + 65) return true;
+        for (const l of lakes) {
+          if (l.isSwamp) continue;
+          const dx = (x - l.x) / (l.rx + pad), dy = (y - l.y) / (l.ry + pad);
+          if (dx * dx + dy * dy < 1) return true;
+        }
+        return false;
+      }
+
+      const treeVariants = ['oak', 'pine', 'birch', 'willow'];
+      const resources = [];
+      let nextResId = 1;
+
+      const starterSpots = [
+        { type: 'tree', variant: 'oak', x: CENTER - 235, y: CENTER + 110 },
+        { type: 'tree', variant: 'willow', x: CENTER + 205, y: CENTER + 195 },
+        { type: 'tree', variant: 'birch', x: CENTER - 210, y: CENTER - 220 },
+        { type: 'tree', variant: 'pine', x: CENTER + 170, y: CENTER - 275 },
+        { type: 'rock', x: CENTER - 195, y: CENTER + 165 },
+        { type: 'rock', x: CENTER - 260, y: CENTER - 65 },
+        { type: 'bush', x: CENTER + 105, y: CENTER - 155 },
+        { type: 'bush', x: CENTER - 135, y: CENTER + 205 }
+      ];
+      for (const s of starterSpots) {
+        resources.push({
+          id: nextResId++, type: s.type, variant: s.variant || null, x: s.x, y: s.y,
+          hp: s.type === 'rock' ? 55 : s.type === 'tree' ? 42 : 1,
+          maxHp: s.type === 'rock' ? 55 : s.type === 'tree' ? 42 : 1,
+          r: s.type === 'tree' ? 30 : s.type === 'rock' ? 23 : 18,
+          hasFruit: s.type === 'bush', regrowTimer: 0, hitFlash: 0, seed: rand()
+        });
+      }
+
+      for (let i = 0; i < 340; i++) {
+        const x = 150 + rand() * (WORLD_SIZE - 300);
+        const y = 150 + rand() * (WORLD_SIZE - 300);
+        if (Math.hypot(x - campPos.x, y - campPos.y) < 250) continue;
+        if (Math.hypot(x - ruinsPos.x, y - ruinsPos.y) < 170) continue;
+        if (Math.hypot(x - altarPos.x, y - altarPos.y) < 260) continue;
+        if (blocked(x, y, 42)) continue;
+        const roll = rand();
+        const type = roll < 0.62 ? 'tree' : roll < 0.85 ? 'rock' : 'bush';
+        let variant = null;
+        if (type === 'tree') {
+          if (Math.hypot(x - snowPos.x, y - snowPos.y) < snowPos.radius) variant = 'snow_pine';
+          else if (y < CENTER - 500) variant = rand() < 0.65 ? 'pine' : 'birch';
+          else if (x > CENTER + 450) variant = rand() < 0.5 ? 'birch' : 'willow';
+          else variant = treeVariants[Math.floor(rand() * treeVariants.length)];
+        }
+        resources.push({
+          id: nextResId++, type, variant, x, y,
+          hp: type === 'rock' ? 58 : type === 'tree' ? 44 : 1,
+          maxHp: type === 'rock' ? 58 : type === 'tree' ? 44 : 1,
+          r: type === 'tree' ? 27 + rand() * 10 : type === 'rock' ? 21 + rand() * 7 : 17,
+          hasFruit: type === 'bush', regrowTimer: 0, hitFlash: 0, seed: rand()
+        });
+      }
+
+      const decor = [];
+      for (let i = 0; i < 620; i++) {
+        const x = 80 + rand() * (WORLD_SIZE - 160), y = 80 + rand() * (WORLD_SIZE - 160);
+        if (blocked(x, y, 8)) continue;
+        const r = rand();
+        decor.push({ x, y, kind: r < 0.58 ? 'grass' : r < 0.84 ? 'flower' : 'pebble', color: rand() < 0.33 ? '#fde047' : rand() < 0.66 ? '#f472b6' : '#93c5fd', size: 3 + rand() * 4.5 });
+      }
+
+      const wildlife = [];
+      for (let i = 0; i < 18; i++) {
+        const x = 300 + rand() * (WORLD_SIZE - 600), y = 300 + rand() * (WORLD_SIZE - 600);
+        if (blocked(x, y, 30)) continue;
+        wildlife.push({ kind: rand() < 0.55 ? 'rabbit' : 'deer', x, y, vx: 0, vy: 0, angle: rand() * Math.PI * 2, timer: 1 + rand() * 3, hop: rand() * 10 });
+      }
+
+      const clouds = [];
+      for (let i = 0; i < 32; i++) {
+        clouds.push({ x: rand() * WORLD_SIZE, y: rand() * WORLD_SIZE, rx: 130 + rand() * 150, ry: 55 + rand() * 55, speed: 16 + rand() * 18 });
+      }
+
+      const weatherDrops = [];
+      for (let i = 0; i < 90; i++) {
+        weatherDrops.push({ x: rand() * 1600, y: rand() * 1000, sp: 0.7 + rand() * 0.7, sz: 1.5 + rand() * 2.5 });
+      }
+
+      const creatures = [];
+      let nextCreatureId = 1;
+
+      function spawnCreature(x, y, kind, playerLvl = 1, forceRune = null) {
+        // Distinct melee, ranged, and ANTI-AIR archetypes!
+        const base = {
+          wolf:           { hp: 68,  r: 19, speed: 132, dmg: 14, range: 32,  role: 'melee',  xp: 28 },
+          swamp_ghoul:    { hp: 82,  r: 20, speed: 102, dmg: 17, range: 38,  role: 'melee',  xp: 34 },
+          lava_golem:     { hp: 130, r: 24, speed: 80,  dmg: 22, range: 44,  role: 'melee',  xp: 48 },
+          crystal_beetle: { hp: 76,  r: 18, speed: 100, dmg: 15, range: 34,  role: 'melee',  xp: 34 },
+          forest_archer:  { hp: 58,  r: 17, speed: 94,  dmg: 14, range: 320, role: 'ranged', xp: 36 },
+          ash_cultist:    { hp: 78,  r: 19, speed: 84,  dmg: 16, range: 360, role: 'ranged', xp: 46 },
+          ice_wraith:     { hp: 84,  r: 18, speed: 112, dmg: 17, range: 340, role: 'ranged', xp: 45 },
+          storm_harpy:    { hp: 74,  r: 20, speed: 155, dmg: 15, range: 260, role: 'antiair', xp: 52 },
+          sky_sentinel:   { hp: 115, r: 23, speed: 0,   dmg: 19, range: 470, role: 'antiair', xp: 60 }
+        }[kind] || { hp: 65, r: 18, speed: 100, dmg: 14, range: 34, role: 'melee', xp: 28 };
+
+        const lvl = Math.max(1, playerLvl + (rand() < 0.25 ? 1 : 0));
+        const scaleHp = 1 + (lvl - 1) * 0.28;
+        const scaleDmg = 1 + (lvl - 1) * 0.20;
+        const scaleSpd = 1 + (lvl - 1) * 0.06;
+
+        // Runic Elites appear at Lv 2+ (or forced)
+        let rune = forceRune;
+        if (!rune && lvl >= 2 && rand() < Math.min(0.65, 0.22 + (lvl - 2) * 0.14)) {
+          rune = RUNE_TYPES[Math.floor(rand() * RUNE_TYPES.length)];
+        }
+
+        const armorMult = (rune && rune.id === 'armor') ? 0.65 : Math.max(0.75, 1 - (lvl - 1) * 0.05);
+        const speedBonus = (rune && rune.id === 'haste') ? 1.32 : 1.0;
+
+        creatures.push({
+          id: nextCreatureId++, kind, role: base.role,
+          x, y, vx: 0, vy: 0, facing: rand() * Math.PI * 2,
+          level: lvl, rune, armorMult, xpReward: Math.round(base.xp * (1 + (lvl - 1) * 0.22) * (rune ? 1.45 : 1)),
+          hp: Math.round(base.hp * scaleHp), maxHp: Math.round(base.hp * scaleHp),
+          r: base.r, speed: base.speed * scaleSpd * speedBonus,
+          damage: Math.round(base.dmg * scaleDmg), range: base.range,
+          atkCd: 0.6 + rand(), wanderAngle: rand() * Math.PI * 2, wanderTimer: 1 + rand() * 3,
+          hitFlash: 0, anim: rand() * 10, burnTimer: 0, slowTimer: 0, lockTarget: false
+        });
+      }
+
+      // Guardians & Anti-Air Sky Sentinels
+      spawnCreature(ruinsPos.x + 85, ruinsPos.y + 45, 'forest_archer', 1);
+      spawnCreature(ruinsPos.x - 80, ruinsPos.y - 50, 'wolf', 1);
+      spawnCreature(volcanoPos.x + 410, volcanoPos.y + 120, 'sky_sentinel', 2, RUNE_TYPES[0]);
+      spawnCreature(snowPos.x - 180, snowPos.y + 240, 'sky_sentinel', 2, RUNE_TYPES[3]);
+      spawnCreature(CENTER + 360, CENTER - 420, 'storm_harpy', 1);
+      spawnCreature(CENTER - 420, CENTER + 460, 'storm_harpy', 1);
+
+      for (let i = 0; i < 40; i++) {
+        const x = 200 + rand() * (WORLD_SIZE - 400), y = 200 + rand() * (WORLD_SIZE - 400);
+        if (Math.hypot(x - campPos.x, y - campPos.y) < 420) continue;
+        if (blocked(x, y, 26)) continue;
+        let kind;
+        if (Math.hypot(x - volcanoPos.x, y - volcanoPos.y) < 780) kind = rand() < 0.5 ? 'lava_golem' : 'ash_cultist';
+        else if (Math.hypot(x - snowPos.x, y - snowPos.y) < snowPos.radius + 90) kind = rand() < 0.65 ? 'ice_wraith' : 'storm_harpy';
+        else if (Math.hypot(x - altarPos.x, y - altarPos.y) < 620) kind = rand() < 0.6 ? 'swamp_ghoul' : 'forest_archer';
+        else {
+          const r = rand();
+          kind = r < 0.34 ? 'wolf' : r < 0.64 ? 'forest_archer' : r < 0.84 ? 'swamp_ghoul' : 'storm_harpy';
+        }
+        spawnCreature(x, y, kind, 1);
+      }
+
+      return {
+        started: false,
+        paused: false,
+        gameOver: false,
+        victory: false,
+        scene: 'overworld',
+        activeCave: null,
+        savedOverworldPos: { x: CENTER, y: CENTER },
+        caveCrystals: [],
+        caveCreatures: [],
+        timeOfDay: 0.22,
+        dayCount: 1,
+        elapsed: 0,
+        kills: 0,
+        shake: 0,
+        cameraZoom: 1.0,
+        targetZoom: 1.0,
+        campPos,
+        villages,
+        npcs,
+        volcanoPos,
+        snowPos,
+        geyserBasin,
+        geysers,
+        caves,
+        ruinsPos,
+        altarPos,
+        worldRunes,
+        hornRelic: { x: ruinsPos.x, y: ruinsPos.y, collected: false },
+        // NERFED & REDESIGNED Tılsımlı Parçacık (Sleek Twin-Spire Orb + Dual Rune Rings!)
+        shard: {
+          name: 'Tılsımlı Parçacık',
+          x: CENTER - 68, y: CENTER + 66, r: 20,
+          teleState: 'ground',
+          z: 0, floatPhase: 0, recallCd: 0,
+          flyStartX: 0, flyStartY: 0, flyTargetX: 0, flyTargetY: 0, flyProgress: 0,
+          hovered: false, hitSet: null
+        },
+        // DRAW-TO-CAST RUNE SPELL SYSTEM
+        runeDrawing: {
+          active: false,
+          points: [],
+          manaSpent: 0,
+          tickAcc: 0
+        },
+        activeRuneLines: [], // { points, element, life, maxLife, isCircle, tickCd }
+        tents: [
+          { x: CENTER - 122, y: CENTER - 62, radius: 195, isStarter: true }
+        ],
+        // ONLY MOUNT: Kadim Ejderha (Horse removed!)
+        dragon: {
+          x: CENTER + 118, y: CENTER + 36, angle: Math.PI * 0.85,
+          mounted: false, flying: false, altitude: 0, wingPhase: 0, flapTimer: 0,
+          flameCd: 0, speedGround: 1.55, speedAir: 2.65
+        },
+        player: {
+          x: CENTER, y: CENTER, vx: 0, vy: 0, aimAngle: 0,
+          level: 1, xp: 0, xpNext: 100,
+          hp: 100, maxHp: 100,
+          mana: 100, maxMana: 100,
+          manaRegenBonus: 1.0,
+          runePowerBonus: 1.0,
+          flamePowerBonus: 1.0,
+          hunger: 100, thirst: 100,
+          baseSpeed: 194, r: 16,
+          shootCd: 0, dashCd: 0, dashTimer: 0, dashVx: 0, dashVy: 0,
+          shieldTimer: 0, shieldCd: 0,
+          hurtFlash: 0, walkPhase: 0,
+          helmetEquipped: false,
+          gauntletMode: 'bolt', // 'bolt' | 'telekinesis' | 'draw'
+          element: 'arcane', // 'arcane' | 'fire' | 'ice'
+          unlockedElements: ['arcane'],
+          invuln: 0
+        },
+        inv: { wood: 3, stone: 3, essence: 0, berry: 3, water: 2, meat: 0, helmet: 0, horn: 0, tent: 0 },
+        seals: { frog: false, magma: false, glacier: false },
+        lakes, resources, decor, wildlife, clouds, weatherDrops, creatures,
+        projectiles: [], afterimages: [], particles: [], waves: [], floatingTexts: [],
+        boss: null, hornCooldown: 0,
+        spawnCreature
+      };
+    }
+
+    // ==================== DOM REFS ====================
+    const elLvlPill = document.getElementById('lvlPill');
+    const elXpFill = document.getElementById('xpFill');
+    const elXpVal = document.getElementById('xpVal');
+    const elHpBar = document.getElementById('hpBar');
+    const elHpVal = document.getElementById('hpVal');
+    const elManaBar = document.getElementById('manaBar');
+    const elManaVal = document.getElementById('manaVal');
+    const elHungerBar = document.getElementById('hungerBar');
+    const elHungerVal = document.getElementById('hungerVal');
+    const elThirstBar = document.getElementById('thirstBar');
+    const elThirstVal = document.getElementById('thirstVal');
+    const elArmorBadge = document.getElementById('armorBadge');
+    const elGauntletBadge = document.getElementById('gauntletBadge');
+    const elMountBadge = document.getElementById('mountBadge');
+    const elTimeBadge = document.getElementById('timeBadge');
+    const elQuestText = document.getElementById('questText');
+    const elBossBarWrap = document.getElementById('bossBarWrap');
+    const elBossNameText = document.getElementById('bossNameText');
+    const elBossHpText = document.getElementById('bossHpText');
+    const elBossHpFill = document.getElementById('bossHpFill');
+    const elInteractPrompt = document.getElementById('interactPrompt');
+    const elFlightToggleBtn = document.getElementById('flightToggleBtn');
+    const elToastStack = document.getElementById('toastStack');
+    const elCraftModal = document.getElementById('craftModal');
+    const elLevelModal = document.getElementById('levelModal');
+    const elJournalModal = document.getElementById('journalModal');
+    const elNpcModal = document.getElementById('npcModal');
+    const elStartOverlay = document.getElementById('startOverlay');
+    const elEndOverlay = document.getElementById('endOverlay');
+
+    function showToast(msg, tone = '') {
+      const div = document.createElement('div');
+      div.className = 'toast ' + tone;
+      div.textContent = msg;
+      elToastStack.appendChild(div);
+      setTimeout(() => { div.style.opacity = '0'; div.style.transition = 'opacity 0.25s'; setTimeout(() => div.remove(), 260); }, 3200);
+    }
+
+    function addFloatingText(x, y, text, color = '#fff') {
+      state.floatingTexts.push({ x, y, text, color, life: 1.05, maxLife: 1.05 });
+    }
+
+    function spawnParticles(x, y, color, count = 8, speed = 90, size = 4) {
+      for (let i = 0; i < count; i++) {
+        const a = Math.random() * Math.PI * 2, sp = (0.3 + Math.random() * 0.85) * speed;
+        state.particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, color, size: size * (0.6 + Math.random() * 0.7), life: 0.35 + Math.random() * 0.42, maxLife: 0.77 });
+      }
+    }
+
+    function spendMana(cost) {
+      if (state.player.mana < cost) {
+        addFloatingText(state.player.x, state.player.y - 26, 'Yetersiz Büyü ✨', '#818cf8');
+        return false;
+      }
+      state.player.mana = Math.max(0, state.player.mana - cost);
+      return true;
+    }
+
+    // ==================== LEVEL UP & PERK SYSTEM ====================
+    function gainXP(amount) {
+      const p = state.player;
+      p.xp += amount;
+      while (p.xp >= p.xpNext) {
+        p.xp -= p.xpNext;
+        p.level++;
+        p.xpNext = Math.round(p.xpNext * 1.45);
+        p.hp = p.maxHp;
+        p.mana = p.maxMana;
+        AudioEngine.playLevelUp();
+        spawnParticles(p.x, p.y, '#facc15', 30, 160, 5);
+        state.waves.push({ x: p.x, y: p.y, r: 18, maxR: 150, speed: 300, color: 'rgba(250,204,21,0.9)', width: 4 });
+        openLevelUpModal();
+      }
+      updateHUD();
+    }
+
+    function openLevelUpModal() {
+      closeAllModals();
+      state.paused = true;
+      document.getElementById('lvlUpTitle').textContent = `⭐ SEVİYE ${state.player.level} OLDUN!`;
+      const allPerks = [
+        { icon: '✨', title: 'Büyü Kaynağı', desc: '+25 Maksimum Büyü & +%25 Büyü dolum hızı', apply: () => { state.player.maxMana += 25; state.player.mana = state.player.maxMana; state.player.manaRegenBonus += 0.25; } },
+        { icon: '✍️', title: 'Usta Rün Çizeri', desc: 'Çizdiğin büyü hatları +%35 daha güçlü ve uzun ömürlü', apply: () => { state.player.runePowerBonus += 0.35; } },
+        { icon: '❤️', title: 'Demir Dayanıklılık', desc: '+25 Maksimum Can ve tam iyileşme', apply: () => { state.player.maxHp += 25; state.player.hp = state.player.maxHp; } },
+        { icon: '🐉', title: 'Ejderha Öfkesi', desc: 'Ejderha Alev Nefesi +%30 hasar verir', apply: () => { state.player.flamePowerBonus += 0.3; } },
+        { icon: '💨', title: 'Rüzgar Adımı', desc: '+%14 hareket hızı', apply: () => { state.player.baseSpeed = Math.round(state.player.baseSpeed * 1.14); } }
+      ];
+      // Shuffle & pick 3
+      const picks = allPerks.sort(() => Math.random() - 0.5).slice(0, 3);
+      const grid = document.getElementById('perkGrid');
+      grid.innerHTML = '';
+      for (const pk of picks) {
+        const card = document.createElement('div');
+        card.className = 'perk-card';
+        card.innerHTML = `<div class="perk-icon">${pk.icon}</div><div class="perk-title">${pk.title}</div><div class="perk-desc">${pk.desc}</div>`;
+        card.addEventListener('click', () => {
+          pk.apply();
+          AudioEngine.playPickup();
+          showToast(`⭐ ${pk.title} seçildi!`, 'gold');
+          closeAllModals();
+          updateHUD();
+        });
+        grid.appendChild(card);
+      }
+      elLevelModal.classList.add('open');
+    }
+
+    // ==================== GAME ACTIONS ====================
+    function isNight() { return state.scene === 'cave' || (state.timeOfDay > 0.58 && state.timeOfDay < 0.94); }
+
+    function getNightFactor() {
+      if (state.scene === 'cave') return 0.94;
+      const t = state.timeOfDay;
+      if (t >= 0.52 && t <= 0.64) return (t - 0.52) / 0.12;
+      if (t > 0.64 && t < 0.88) return 1;
+      if (t >= 0.88 && t <= 0.98) return 1 - (t - 0.88) / 0.10;
+      return 0;
+    }
+
+    function closeAllModals() {
+      state.paused = false;
+      elCraftModal.classList.remove('open');
+      elLevelModal.classList.remove('open');
+      elJournalModal.classList.remove('open');
+      elNpcModal.classList.remove('open');
+    }
+
+    function setGauntletMode(mode) {
+      const p = state.player;
+      p.gauntletMode = p.gauntletMode === mode ? 'bolt' : mode;
+      state.runeDrawing.active = false;
+      state.runeDrawing.points = [];
+      AudioEngine.playPickup();
+      if (p.gauntletMode === 'telekinesis') showToast('🔮 Telekinezi aktif! Tılsımlı Parçacık\'a tıkla (Sağ Tık: Geri Çağır).', 'violet');
+      else if (p.gauntletMode === 'draw') showToast('✍️ Rün Çizimi aktif! Sol tıkı basılı tutup haritada çizgi veya çember çiz!', 'gold');
+      else showToast('✨ Element Eldiveni aktif!', 'cyan');
+      updateHUD();
+    }
+
+    function cycleElement() {
+      const p = state.player;
+      if (p.unlockedElements.length <= 1) {
+        showToast('Ateş Rünü (Volkan) veya Buz Rünü (Gayzerler / Demirci Boran) bularak yeni elementler aç!', 'gold');
+        return;
+      }
+      const idx = p.unlockedElements.indexOf(p.element);
+      p.element = p.unlockedElements[(idx + 1) % p.unlockedElements.length];
+      AudioEngine.playMagicShot(p.element);
+      const names = { arcane: '⚡ Arkana', fire: '🔥 Ateş', ice: '❄️ Buz' };
+      showToast(`Aktif Element: ${names[p.element]}`, p.element === 'fire' ? 'danger' : 'cyan');
+      updateHUD();
+    }
+
+    // ---- DRAW-TO-CAST RUNE SPELL (HOLD LEFT CLICK & DRAW ON MAP!) ----
+    function startRuneDraw() {
+      if (state.player.mana < 14) {
+        addFloatingText(state.player.x, state.player.y - 26, 'Çizim için Büyü Yetersiz ✨', '#818cf8');
+        return;
+      }
+      const wp = screenToWorld(mouse.x, mouse.y);
+      state.runeDrawing.active = true;
+      state.runeDrawing.points = [{ x: wp.x, y: wp.y }];
+      state.runeDrawing.manaSpent = 12;
+      state.player.mana -= 12;
+      AudioEngine.playDrawTick(0);
+    }
+
+    function continueRuneDraw() {
+      const rd = state.runeDrawing;
+      if (!rd.active) return;
+      const wp = screenToWorld(mouse.x, mouse.y);
+      const last = rd.points[rd.points.length - 1];
+      const d = Math.hypot(wp.x - last.x, wp.y - last.y);
+      if (d >= 22 && rd.points.length < 36) {
+        if (state.player.mana < 2.2) { finishRuneDraw(); return; }
+        state.player.mana -= 2.2;
+        rd.manaSpent += 2.2;
+        rd.points.push({ x: wp.x, y: wp.y });
+        AudioEngine.playDrawTick(rd.points.length);
+        spawnParticles(wp.x, wp.y, '#fde047', 2, 35, 2.5);
+      }
+    }
+
+    function finishRuneDraw() {
+      const rd = state.runeDrawing;
+      if (!rd.active) return;
+      rd.active = false;
+      const pts = rd.points;
+      rd.points = [];
+      if (pts.length < 2) return;
+
+      // Check if player drew a closed circle/loop!
+      const first = pts[0], last = pts[pts.length - 1];
+      const isCircle = pts.length >= 9 && Math.hypot(first.x - last.x, first.y - last.y) < 95;
+      const elem = state.player.element;
+      const dur = (isCircle ? 5.2 : 3.8) * state.player.runePowerBonus;
+
+      state.activeRuneLines.push({
+        points: pts,
+        element: elem,
+        life: dur,
+        maxLife: dur,
+        isCircle,
+        tickCd: 0
+      });
+
+      AudioEngine.playRuneIgnite(elem, isCircle);
+      state.shake = Math.max(state.shake, isCircle ? 10 : 5);
+
+      const col = elem === 'fire' ? '#f97316' : elem === 'ice' ? '#38bdf8' : '#a855f7';
+      for (const pt of pts) spawnParticles(pt.x, pt.y, col, 3, 70, 3.5);
+
+      if (isCircle) {
+        // Compute centroid for bonus Circle Seal burst!
+        let cx = 0, cy = 0;
+        for (const pt of pts) { cx += pt.x; cy += pt.y; }
+        cx /= pts.length; cy /= pts.length;
+        state.waves.push({ x: cx, y: cy, r: 16, maxR: 160, speed: 340, color: col, width: 4 });
+        addFloatingText(cx, cy - 20, '✦ ÇEMBER MÜHRÜ! ✦', '#fef08a');
+        // Instant AoE damage inside the circle!
+        const list = state.scene === 'cave' ? state.caveCreatures : state.creatures;
+        for (let i = list.length - 1; i >= 0; i--) {
+          if (Math.hypot(list[i].x - cx, list[i].y - cy) < 145) {
+            damageCreature(list, i, Math.round(45 * state.player.runePowerBonus), 0, 0, col, elem);
+          }
+        }
+        if (state.boss && state.boss.hp > 0 && Math.hypot(state.boss.x - cx, state.boss.y - cy) < 170) {
+          damageBoss(Math.round(52 * state.player.runePowerBonus), state.boss.x, state.boss.y, col, elem);
+        }
+      }
+    }
+
+    // ---- NERFED TILSIMLI PARÇACIK TELEKINEZİ ----
+    function handleTelekinesisLeftClick() {
+      if (state.scene !== 'overworld') { showToast('Tılsımlı Parçacık dış dünyada!', 'violet'); return; }
+      const sh = state.shard;
+      const worldPt = screenToWorld(mouse.x, mouse.y);
+
+      if (sh.teleState === 'floating' || sh.teleState === 'lifting') {
+        if (!spendMana(24)) return;
+        sh.teleState = 'flying';
+        sh.flyStartX = sh.x; sh.flyStartY = sh.y;
+        sh.flyTargetX = Math.max(80, Math.min(WORLD_SIZE - 80, worldPt.x));
+        sh.flyTargetY = Math.max(80, Math.min(WORLD_SIZE - 80, worldPt.y));
+        sh.flyProgress = 0; sh.hitSet = new Set();
+        AudioEngine.playTeleThrow();
+        spawnParticles(sh.x, sh.y - sh.z, '#c084fc', 16, 130, 4);
+        return;
+      }
+
+      if (sh.teleState === 'ground') {
+        if (Math.hypot(worldPt.x - sh.x, worldPt.y - sh.y) < sh.r + 28) {
+          if (!spendMana(22)) return;
+          sh.teleState = 'lifting'; sh.z = 0;
+          AudioEngine.playTeleLift();
+          spawnParticles(sh.x, sh.y, '#c084fc', 18, 105, 4);
+        } else {
+          showToast('Sadece Tılsımlı Parçacık\'ı kaldırabilirsin (Sağ Tık: Geri Çağır).', 'violet');
+        }
+      }
+    }
+
+    function handleRightClickAction() {
+      if (!state || !state.started || state.paused || state.gameOver) return;
+      const p = state.player;
+      if (p.gauntletMode === 'telekinesis' && state.scene === 'overworld') {
+        const sh = state.shard;
+        if (sh.teleState === 'returning' || sh.recallCd > 0) return;
+        if (!spendMana(18)) return;
+        sh.teleState = 'returning'; sh.hitSet = new Set(); sh.recallCd = 0.8;
+        AudioEngine.playTeleRecall();
+        spawnParticles(sh.x, sh.y - sh.z, '#e879f9', 14, 110, 4);
+        return;
+      }
+      if (p.shieldCd > 0) return;
+      if (!spendMana(22)) return;
+      p.shieldTimer = 0.7; p.shieldCd = 2.1;
+      AudioEngine.playShield();
+      state.waves.push({ x: p.x, y: p.y, r: 14, maxR: 54, speed: 220, color: 'rgba(94,234,212,0.85)', width: 3 });
+    }
+
+    function performDash() {
+      const p = state.player;
+      if (p.dashCd > 0 || p.dashTimer > 0) return;
+      if (!spendMana(20)) return;
+      let dx = 0, dy = 0;
+      if (keys['KeyW'] || keys['ArrowUp']) dy -= 1;
+      if (keys['KeyS'] || keys['ArrowDown']) dy += 1;
+      if (keys['KeyA'] || keys['ArrowLeft']) dx -= 1;
+      if (keys['KeyD'] || keys['ArrowRight']) dx += 1;
+      if (dx === 0 && dy === 0) { dx = Math.cos(p.aimAngle); dy = Math.sin(p.aimAngle); }
+      const len = Math.hypot(dx, dy) || 1;
+
+      const isAerial = state.dragon.mounted && state.dragon.altitude > 0.25;
+      const dashSp = isAerial ? 920 : 680;
+      p.dashVx = (dx / len) * dashSp;
+      p.dashVy = (dy / len) * dashSp;
+      p.dashTimer = 0.22;
+      p.dashCd = 1.1;
+      p.invuln = Math.max(p.invuln, 0.34);
+      AudioEngine.playDash();
+      spawnParticles(p.x, p.y, isAerial ? '#fb923c' : '#818cf8', 14, 120, 4.2);
+    }
+
+    function fireMagicGauntlets() {
+      const p = state.player;
+      if (state.dragon.mounted && state.scene === 'overworld') {
+        if (state.dragon.flameCd > 0) return;
+        if (!spendMana(9)) return;
+        state.dragon.flameCd = 0.15;
+        const baseAng = p.aimAngle;
+        AudioEngine.playDragonFlame();
+        const dmg = Math.round(16 * p.flamePowerBonus);
+        for (let k = -1; k <= 1; k++) {
+          const a = baseAng + k * 0.14 + (Math.random() - 0.5) * 0.06;
+          state.projectiles.push({
+            x: p.x + Math.cos(baseAng) * 44, y: p.y + Math.sin(baseAng) * 44 - state.dragon.altitude * 24,
+            vx: Math.cos(a) * 470, vy: Math.sin(a) * 470, r: 12, damage: dmg, element: 'dragon_fire', life: 0.65,
+            hitsAir: true
+          });
+        }
+        return;
+      }
+
+      if (p.shootCd > 0) return;
+      let elem = p.element;
+      if (elem !== 'arcane') {
+        if (p.mana >= 6) p.mana -= 6;
+        else elem = 'arcane';
+      }
+      p.shootCd = 0.24;
+      const angle = p.aimAngle;
+      const side = (Math.floor(state.elapsed * 10) % 2 === 0 ? 1 : -1) * 10;
+      const sx = p.x + Math.cos(angle) * 20 - Math.sin(angle) * side;
+      const sy = p.y + Math.sin(angle) * 20 + Math.cos(angle) * side;
+      state.projectiles.push({
+        x: sx, y: sy, vx: Math.cos(angle) * 580, vy: Math.sin(angle) * 580,
+        r: elem === 'arcane' ? 7 : 8.5, damage: elem === 'fire' ? 25 : elem === 'ice' ? 22 : 20,
+        element: elem, life: 1.05, hitsAir: true
+      });
+      const col = elem === 'fire' ? '#fb923c' : elem === 'ice' ? '#38bdf8' : '#5eead4';
+      spawnParticles(sx, sy, col, 6, 85, 3.5);
+      AudioEngine.playMagicShot(elem);
+    }
+
+    function toggleDragonFlight() {
+      const dr = state.dragon;
+      if (!dr.mounted || state.scene !== 'overworld') return;
+      dr.flying = !dr.flying;
+      AudioEngine.playWingFlap();
+      spawnParticles(state.player.x, state.player.y, '#fb923c', 18, 130, 5);
+      showToast(dr.flying ? '🐉 Gökyüzüne yükseldin! Fırtına Harpilerine ve Gökyüzü Gözcülerine dikkat!' : '🐉 Ejderha alçaldı.', dr.flying ? 'danger' : 'gold');
+      updateHUD();
+    }
+
+    function toggleMount() {
+      if (state.scene !== 'overworld') { showToast('Mağara içinde ejderha kullanılamaz!', ''); return; }
+      const p = state.player, dr = state.dragon;
+      if (dr.mounted) {
+        if (dr.flying && dr.altitude > 0.25) { dr.flying = false; showToast('İnmek için önce alçalıyorsun...', 'gold'); updateHUD(); return; }
+        dr.mounted = false; dr.flying = false;
+        dr.x = p.x + Math.cos(p.aimAngle + Math.PI / 2) * 44;
+        dr.y = p.y + Math.sin(p.aimAngle + Math.PI / 2) * 44;
+        showToast('Ejderhadan indin.', ''); AudioEngine.playHit(false); updateHUD(); return;
+      }
+      if (Math.hypot(p.x - dr.x, p.y - dr.y) < 105) {
+        dr.mounted = true; dr.flying = true;
+        AudioEngine.playWingFlap();
+        spawnParticles(p.x, p.y, '#f97316', 22, 130, 5);
+        showToast('🐉 Kadim Ejderha\'ya bindin! Space: Havada Sıyrıl • Shift: Alçal/Yüksel', 'danger');
+        updateHUD();
+      } else showToast('Ejderhana yaklaşmalısın (Miniharitada kırmızı nokta).', '');
+    }
+
+    // ---- CAVES ----
+    function enterCave(cave) {
+      if (state.dragon.mounted) { showToast('Mağaraya girmek için önce Ejderhadan in (F).', 'gold'); return; }
+      state.scene = 'cave'; state.activeCave = cave;
+      state.savedOverworldPos = { x: state.player.x, y: state.player.y + 30 };
+      state.player.x = CAVE_W / 2; state.player.y = CAVE_H - 95;
+      state.projectiles = []; state.activeRuneLines = []; state.cameraZoom = 1.0;
+
+      state.caveCrystals = [
+        { x: 240, y: 260, r: 24, hp: 40, color: cave.crystalColor },
+        { x: 560, y: 175, r: 28, hp: 50, color: cave.crystalColor },
+        { x: 860, y: 270, r: 24, hp: 40, color: cave.crystalColor },
+        { x: 340, y: 520, r: 22, hp: 40, color: cave.crystalColor },
+        { x: 780, y: 510, r: 26, hp: 45, color: cave.crystalColor }
+      ];
+      state.caveCreatures = [];
+      const lvl = state.player.level;
+      [[340, 310], [740, 310], [550, 230]].forEach(([cx, cy], idx) => {
+        state.caveCreatures.push({
+          id: 900 + idx, kind: 'crystal_beetle', role: 'melee', x: cx, y: cy, vx: 0, vy: 0, facing: 0,
+          level: lvl, rune: lvl >= 2 && idx === 2 ? RUNE_TYPES[1] : null, armorMult: lvl >= 2 && idx === 2 ? 0.65 : 1,
+          xpReward: 42 * lvl, hp: Math.round(75 * (1 + (lvl - 1) * 0.28)), maxHp: Math.round(75 * (1 + (lvl - 1) * 0.28)),
+          r: 18, speed: 102, damage: Math.round(15 * (1 + (lvl - 1) * 0.2)), range: 34,
+          atkCd: 0.6, wanderAngle: idx, wanderTimer: 2, hitFlash: 0, anim: idx * 2, burnTimer: 0, slowTimer: 0
+        });
+      });
+
+      AudioEngine.playCaveEnter();
+      showToast(`💎 ${cave.name}'na girdin!`, 'violet');
+      updateHUD();
+    }
+
+    function exitCave() {
+      state.scene = 'overworld';
+      state.player.x = state.savedOverworldPos.x; state.player.y = state.savedOverworldPos.y;
+      state.activeCave = null; state.projectiles = []; state.activeRuneLines = [];
+      AudioEngine.playCaveEnter(); showToast('🌿 Mağaradan çıktın.', 'cyan'); updateHUD();
+    }
+
+    // ---- HORN & 3 BOSSES ----
+    function blowHorn() {
+      if (state.inv.horn <= 0) { showToast('Henüz Borozan bulamadın! Antik Harabe\'yi keşfet.', 'danger'); return; }
+      if (state.hornCooldown > 0) return;
+      state.hornCooldown = 2.4;
+      const p = state.player;
+      AudioEngine.playHorn();
+      state.shake = Math.max(state.shake, 7);
+      for (let i = 0; i < 3; i++) {
+        state.waves.push({ x: p.x, y: p.y, r: 18 + i * 16, maxR: 480 + i * 50, speed: 380, color: i === 0 ? 'rgba(250,204,21,0.9)' : 'rgba(94,234,212,0.65)', width: 4 - i * 0.8 });
+      }
+      if (state.scene === 'overworld') {
+        if (Math.hypot(p.x - state.altarPos.x, p.y - state.altarPos.y) < 220) { spawnBoss('frog', state.altarPos.x, state.altarPos.y - 110); return; }
+        if (Math.hypot(p.x - state.volcanoPos.x, p.y - state.volcanoPos.y) < 430) { spawnBoss('magma', state.volcanoPos.x + 140, state.volcanoPos.y + 140); return; }
+        if (Math.hypot(p.x - state.snowPos.x, p.y - state.snowPos.y) < 340) { spawnBoss('glacier', state.snowPos.x, state.snowPos.y - 100); return; }
+      }
+      showToast('📯 Borozan yankılandı! Boss çağırmak için Bataklık Sunağı, Volkan veya Buzul Sunak\'ta üfle.', 'cyan');
+    }
+
+    function spawnBoss(kind, bx, by) {
+      if (state.boss && state.boss.hp > 0) { showToast('Aktif bir Boss zaten savaşta!', 'danger'); return; }
+      const lvlScale = 1 + (state.player.level - 1) * 0.18;
+      const cfg = {
+        frog: { name: '🐸 KADİM BATAKLIK KURBAĞASI', hp: Math.round(620 * lvlScale), r: 58, col: '#4ade80' },
+        magma: { name: '🌋 MAGMA DEV GOLEMİ', hp: Math.round(740 * lvlScale), r: 62, col: '#f97316' },
+        glacier: { name: '❄️ BUZUL MUHAFIZI', hp: Math.round(700 * lvlScale), r: 56, col: '#38bdf8' }
+      }[kind];
+
+      state.boss = {
+        kind, name: cfg.name, x: bx, y: by, r: cfg.r, hp: cfg.hp, maxHp: cfg.hp,
+        state: 'idle', stateTimer: 1.1, facing: Math.PI / 2, hitFlash: 0, burnTimer: 0, slowTimer: 0,
+        tongueAngle: 0, tongueLen: 0, tongueMaxLen: 345, tongueHitDone: false,
+        leapStartX: 0, leapStartY: 0, leapTargetX: 0, leapTargetY: 0, leapProgress: 0, leapZ: 0, breathePhase: 0
+      };
+      state.shake = 16; AudioEngine.playBossRoar();
+      spawnParticles(bx, by, cfg.col, 34, 190, 7);
+      state.waves.push({ x: bx, y: by, r: 30, maxR: 340, speed: 350, color: cfg.col, width: 5 });
+      showToast(`${cfg.name} UYANDI!`, 'danger');
+      updateHUD();
+    }
+
+    function damagePlayer(rawAmount, hitsAir = false) {
+      const p = state.player;
+      if (p.invuln > 0 || state.gameOver) return;
+      if (!hitsAir && state.dragon.mounted && state.dragon.altitude > 0.45) return;
+
+      if (p.shieldTimer > 0) {
+        AudioEngine.playShield();
+        spawnParticles(p.x, p.y, '#5eead4', 18, 130, 4);
+        addFloatingText(p.x, p.y - 26, 'BLOKLANDI! 🛡️', '#5eead4');
+        p.invuln = 0.5;
+        return;
+      }
+
+      const mult = p.helmetEquipped ? 0.55 : 1.0;
+      const dmg = Math.max(1, Math.round(rawAmount * mult));
+      p.hp = Math.max(0, p.hp - dmg);
+      p.hurtFlash = 0.25; p.invuln = 0.48;
+      state.shake = Math.max(state.shake, 6);
+      AudioEngine.playHit(true);
+      addFloatingText(p.x, p.y - 24, `-${dmg}${p.helmetEquipped ? ' 🛡️' : ''}`, '#f87171');
+      if (p.hp <= 0) triggerGameOver(false);
+      updateHUD();
+    }
+
+    function onBossDefeated(boss) {
+      state.seals[boss.kind] = true;
+      state.inv.essence += 6; state.inv.stone += 6;
+      gainXP(140);
+      showToast(`🏆 ${boss.name} YENİLDİ!`, 'gold');
+      if (state.seals.frog && state.seals.magma && state.seals.glacier) triggerGameOver(true);
+      updateHUD();
+    }
+
+    function triggerGameOver(isVictory) {
+      if (isVictory) {
+        state.victory = true;
+        document.getElementById('endEyebrow').textContent = 'ÜÇ MÜHÜR TAMAMLANDI';
+        document.getElementById('endTitle').textContent = '🏆 KADİM VADİ KURTULDU!';
+        document.getElementById('endDesc').textContent = `Seviye ${state.player.level} olarak ${state.dayCount}. günde üç kadim koruyucuyu da yendin!`;
+        document.getElementById('continueBtn').style.display = 'inline-flex';
+      } else {
+        state.gameOver = true;
+        document.getElementById('endEyebrow').textContent = 'MACERA SONA ERDİ';
+        document.getElementById('endTitle').textContent = 'VAHŞİ DOĞAYA YENİLDİN';
+        document.getElementById('endDesc').textContent = 'Rün Çizimi (Z), Atılma (Space) ve Büyü Kalkanı (Sağ Tık) ile tekrar dene!';
+        document.getElementById('continueBtn').style.display = 'none';
+      }
+      elEndOverlay.classList.remove('hidden');
+    }
+
+    function useHotbarSlot(slotNum) {
+      const p = state.player;
+      if (slotNum === 1) {
+        if (state.inv.berry > 0) { state.inv.berry--; p.hunger = Math.min(100, p.hunger + 26); p.hp = Math.min(p.maxHp, p.hp + 8); AudioEngine.playPickup(); }
+        else showToast('Meyven kalmadı.', '');
+      } else if (slotNum === 2) {
+        if (state.inv.water > 0) { state.inv.water--; p.thirst = Math.min(100, p.thirst + 42); p.mana = Math.min(p.maxMana, p.mana + 15); AudioEngine.playPickup(); }
+        else showToast('Mataran boş! Göl veya çeşmeden doldur (E).', '');
+      } else if (slotNum === 3) {
+        if (state.inv.meat > 0) { state.inv.meat--; p.hunger = Math.min(100, p.hunger + 48); p.hp = Math.min(p.maxHp, p.hp + 20); AudioEngine.playPickup(); }
+      } else if (slotNum === 4) {
+        if (state.inv.helmet > 0) { p.helmetEquipped = !p.helmetEquipped; AudioEngine.playPickup(); showToast(p.helmetEquipped ? '🪖 Demir Kask takıldı!' : 'Kask çıkarıldı.', 'cyan'); }
+        else showToast('C menüsünden Demir Kask üretebilirsin.', '');
+      } else if (slotNum === 5) blowHorn();
+      else if (slotNum === 6) {
+        if (state.scene !== 'overworld') { showToast('Çadır sadece dış dünyada kurulur.', ''); return; }
+        if (state.inv.tent > 0) {
+          state.inv.tent--;
+          state.tents.push({ x: p.x + Math.cos(p.aimAngle) * 75, y: p.y + Math.sin(p.aimAngle) * 75, radius: 195, isStarter: false });
+          AudioEngine.playPickup(); showToast('⛺ Yeni çadır kuruldu!', 'gold');
+        } else showToast('Çantanda çadır yok!', '');
+      } else if (slotNum === 7) setGauntletMode('telekinesis');
+      else if (slotNum === 8) setGauntletMode('draw');
+      else if (slotNum === 9) cycleElement();
+      updateHUD();
+    }
+
+    // ---- MODALS ----
+    function openJournal() {
+      closeAllModals(); state.paused = true;
+      const seals = [
+        { key: 'frog', title: '🐸 1. Mühür: Kadim Bataklık Kurbağası', desc: 'Antik Harabe\'den Borozan\'ı bul ve güneybatıdaki Bataklık Sunağı\'nda üfle (R).' },
+        { key: 'magma', title: '🌋 2. Mühür: Magma Dev Golemi', desc: 'Kuzeybatıdaki Kızıl Volkan kraterine git (E veya Borozan ile uyandır).' },
+        { key: 'glacier', title: '❄️ 3. Mühür: Buzul Muhafızı', desc: 'Kuzeydoğudaki Karlı Buzul Yayla sunağına ulaş ve muhafızı yen.' }
+      ];
+      document.getElementById('sealList').innerHTML = seals.map(s => `
+        <div class="seal-row ${state.seals[s.key] ? 'done' : ''}">
+          <div><strong>${s.title}</strong><div style="font-size:11.5px; color:#94a3b8; margin-top:2px;">${s.desc}</div></div>
+          <span style="font-weight:700; color:${state.seals[s.key] ? '#4ade80' : '#eab963'}">${state.seals[s.key] ? '✓ Kırıldı' : 'Bekliyor'}</span>
+        </div>`).join('');
+      elJournalModal.classList.add('open');
+    }
+
+    function openNpcModal(npc) {
+      closeAllModals(); state.paused = true;
+      document.getElementById('npcNameTitle').textContent = `${npc.icon} ${npc.name} (${npc.role})`;
+      const body = document.getElementById('npcDialogueBody');
+      const actions = document.getElementById('npcActions');
+      actions.innerHTML = '';
+      const doneCount = [state.seals.frog, state.seals.magma, state.seals.glacier].filter(Boolean).length;
+
+      if (npc.id === 'aldor') {
+        body.textContent = doneCount < 3
+          ? `"Hoş geldin Seviye ${state.player.level} büyücü! ${doneCount}/3 mühür kırıldı. Dikkatli ol: sen güçlendikçe vadideki canavarlar da rün kuşanıp güçleniyor, gökyüzünde ise Fırtına Harpileri kol geziyor!"`
+          : '"Üç mühür de tamamlandı! Kadim Vadi sana sonsuza dek minnettar kalacak!"';
+      } else if (npc.id === 'mira') {
+        body.textContent = '"Z tuşuna basıp canavarların etrafına tam bir daire çizersen Çember Mührü patlar! Ejderhada uçarken gökyüzü ışınlarından kaçmak için Space ile havada sıyrılmayı unutma."';
+      } else if (npc.id === 'boran') {
+        body.textContent = '"Demirci Boran\'ın tezgahına hoş geldin! Topladığın özlerle element rünleri ve iksirler alabilirsin."';
+        const offers = [
+          { title: '🔥 Ateş Rünü', desc: 'Atışların ve çizdiğin rün duvarları yakar.', cost: '3 Öz • 3 Demir',
+            can: () => !state.player.unlockedElements.includes('fire') && state.inv.essence >= 3 && state.inv.stone >= 3,
+            done: () => state.player.unlockedElements.includes('fire'),
+            buy: () => { state.inv.essence -= 3; state.inv.stone -= 3; state.player.unlockedElements.push('fire'); state.player.element = 'fire'; showToast('🔥 Ateş Rünü açıldı!', 'danger'); } },
+          { title: '❄️ Buz Rünü', desc: 'Atışların ve çizdiğin rün duvarları dondurur.', cost: '3 Öz • 3 Demir',
+            can: () => !state.player.unlockedElements.includes('ice') && state.inv.essence >= 3 && state.inv.stone >= 3,
+            done: () => state.player.unlockedElements.includes('ice'),
+            buy: () => { state.inv.essence -= 3; state.inv.stone -= 3; state.player.unlockedElements.push('ice'); state.player.element = 'ice'; showToast('❄️ Buz Rünü açıldı!', 'cyan'); } },
+          { title: '🧪 Usta Şifa & Büyü İksiri', desc: 'Can ve Büyü Barını tamamen doldurur.', cost: '2 Öz',
+            can: () => state.inv.essence >= 2, done: () => false,
+            buy: () => { state.inv.essence -= 2; state.player.hp = state.player.maxHp; state.player.mana = state.player.maxMana; showToast('🧪 Can ve Büyü doldu!', 'cyan'); } }
+        ];
+        for (const o of offers) {
+          const card = document.createElement('div'); card.className = 'recipe-card';
+          card.innerHTML = `<div class="recipe-info"><h3>${o.title}</h3><p>${o.desc}</p><div class="recipe-cost">${o.cost}</div></div>`;
+          const btn = document.createElement('button'); btn.className = 'craft-btn'; btn.type = 'button';
+          btn.textContent = o.done() ? 'Sahipsin ✓' : 'Takas Et'; btn.disabled = !o.can();
+          btn.addEventListener('click', () => { o.buy(); AudioEngine.playPickup(); updateHUD(); openNpcModal(npc); });
+          card.appendChild(btn); actions.appendChild(card);
+        }
+      }
+      elNpcModal.classList.add('open');
+    }
+
+    function findNearestInteractable() {
+      const p = state.player;
+      if (state.scene === 'cave') {
+        if (Math.hypot(p.x - CAVE_W / 2, p.y - (CAVE_H - 55)) < 85) return { type: 'exit_cave', label: '[E] Mağaradan Çık 🌿' };
+        for (const cr of state.caveCrystals) if (Math.hypot(p.x - cr.x, p.y - cr.y) < 75) return { type: 'cave_crystal', target: cr, label: '[E] Kristal Kaz 💎' };
+        return null;
+      }
+      if (state.dragon.mounted && state.dragon.altitude > 0.3) return null;
+
+      for (const wr of state.worldRunes) if (!wr.collected && Math.hypot(p.x - wr.x, p.y - wr.y) < 78) return { type: 'rune', target: wr, label: `[E] ${wr.name}'nü Al ✨` };
+      if (!state.hornRelic.collected && Math.hypot(p.x - state.hornRelic.x, p.y - state.hornRelic.y) < 82) return { type: 'horn', label: '[E] Kadim Borozan\'ı Al 📯' };
+      if (state.inv.horn > 0 && (!state.boss || state.boss.hp <= 0) && Math.hypot(p.x - state.altarPos.x, p.y - state.altarPos.y) < 190) return { type: 'summon_frog', label: '[R] Bataklık Sunağı\'nda Borozan Üfle 🐸' };
+      if (!state.seals.magma && (!state.boss || state.boss.hp <= 0) && Math.hypot(p.x - state.volcanoPos.x, p.y - state.volcanoPos.y) < 390) return { type: 'summon_magma', label: '[E] Magma Dev Golemi\'ni Uyandır 🌋' };
+      if (!state.seals.glacier && (!state.boss || state.boss.hp <= 0) && Math.hypot(p.x - state.snowPos.x, p.y - state.snowPos.y) < 170) return { type: 'summon_glacier', label: '[E] Buzul Muhafızı\'nı Uyandır ❄️' };
+
+      for (const npc of state.npcs) if (Math.hypot(p.x - npc.x, p.y - npc.y) < 82) return { type: 'npc', target: npc, label: `[E] ${npc.name} ile Konuş ${npc.icon}` };
+      for (const c of state.caves) if (Math.hypot(p.x - c.x, p.y - c.y) < c.r + 36) return { type: 'enter_cave', target: c, label: `[E] ${c.name}'na Gir 💎` };
+      if (!state.dragon.mounted && Math.hypot(p.x - state.dragon.x, p.y - state.dragon.y) < 105) return { type: 'dragon', label: '[F] Kadim Ejderha\'ya Bin & Uç 🐉' };
+
+      let bestRes = null, bestDist = 74;
+      for (const r of state.resources) {
+        if (r.type === 'bush' && !r.hasFruit) continue;
+        const d = Math.hypot(p.x - r.x, p.y - r.y);
+        if (d < bestDist) { bestDist = d; bestRes = r; }
+      }
+      if (bestRes) {
+        const names = { tree: 'Odun Topla 🪵', rock: 'Demir/Taş Kaz 🪨', bush: 'Meyve Topla 🫐' };
+        return { type: 'resource', target: bestRes, label: `[E] ${names[bestRes.type]}` };
+      }
+
+      for (const v of state.villages) if (Math.hypot(p.x - v.fountain.x, p.y - v.fountain.y) < 68) return { type: 'water', label: '[E] Köy Çeşmesinden Su İç 💧' };
+      for (const l of state.lakes) {
+        if (l.isSwamp) continue;
+        const dx = (p.x - l.x) / (l.rx + 42), dy = (p.y - l.y) / (l.ry + 42);
+        if (dx * dx + dy * dy < 1) return { type: 'water', label: '[E] Göl Suyu İç & Doldur 💧' };
+      }
+      return null;
+    }
+
+    function performInteract() {
+      const t = findNearestInteractable();
+      if (!t) return;
+      const p = state.player;
+      if (t.type === 'exit_cave') exitCave();
+      else if (t.type === 'enter_cave') enterCave(t.target);
+      else if (t.type === 'cave_crystal') {
+        const cr = t.target; cr.hp -= 25; AudioEngine.playHit(false); spawnParticles(cr.x, cr.y, cr.color, 10, 100, 3.5);
+        if (cr.hp <= 0) { state.inv.stone += 3; state.inv.essence += 2; AudioEngine.playPickup(); state.caveCrystals = state.caveCrystals.filter(c => c !== cr); }
+      } else if (t.type === 'rune') {
+        const wr = t.target; wr.collected = true;
+        if (!p.unlockedElements.includes(wr.id)) p.unlockedElements.push(wr.id);
+        p.element = wr.id; AudioEngine.playPickup(); showToast(`✨ ${wr.name} alındı!`, 'gold');
+      } else if (t.type === 'horn') {
+        state.hornRelic.collected = true; state.inv.horn = 1; AudioEngine.playPickup(); showToast('📯 NADİR BOROZAN BULUNDU!', 'gold');
+      } else if (t.type === 'summon_frog') blowHorn();
+      else if (t.type === 'summon_magma') spawnBoss('magma', state.volcanoPos.x + 160, state.volcanoPos.y + 150);
+      else if (t.type === 'summon_glacier') spawnBoss('glacier', state.snowPos.x, state.snowPos.y - 100);
+      else if (t.type === 'npc') openNpcModal(t.target);
+      else if (t.type === 'dragon') toggleMount();
+      else if (t.type === 'water') { p.thirst = 100; state.inv.water = Math.min(5, state.inv.water + 2); AudioEngine.playPickup(); addFloatingText(p.x, p.y - 26, 'Su Dolu 💧', '#38bdf8'); }
+      else if (t.type === 'resource') harvestResource(t.target, 26);
+      updateHUD();
+    }
+
+    function harvestResource(res, power) {
+      if (res.type === 'bush') {
+        if (!res.hasFruit) return;
+        res.hasFruit = false; res.regrowTimer = 35; state.inv.berry += 2; AudioEngine.playPickup(); updateHUD(); return;
+      }
+      res.hp -= power; res.hitFlash = 0.14; AudioEngine.playHit(false);
+      if (res.hp <= 0) {
+        if (res.type === 'tree') state.inv.wood += 3; else state.inv.stone += 3;
+        state.resources = state.resources.filter(r => r.id !== res.id); updateHUD();
+      }
+    }
+
+    function openCrafting(open) {
+      closeAllModals();
+      if (open) { state.paused = true; elCraftModal.classList.add('open'); updateCraftingModal(); }
+    }
+
+    function updateCraftingModal() {
+      document.getElementById('matWood').textContent = state.inv.wood;
+      document.getElementById('matStone').textContent = state.inv.stone;
+      document.getElementById('matEssence').textContent = state.inv.essence;
+      document.getElementById('matBerry').textContent = state.inv.berry;
+      const bHelm = document.getElementById('btnCraftHelmet');
+      bHelm.disabled = !(state.inv.stone >= 5 && state.inv.wood >= 3) || state.inv.helmet > 0;
+      bHelm.textContent = state.inv.helmet > 0 ? 'Üretildi ✓' : 'Üret';
+      document.getElementById('btnCraftTent').disabled = !(state.inv.wood >= 6 && state.inv.stone >= 3);
+      document.getElementById('btnCraftPotion').disabled = !(state.inv.berry >= 3 && state.inv.essence >= 2);
+    }
+
+    document.getElementById('btnCraftHelmet').addEventListener('click', () => {
+      if (state.inv.stone < 5 || state.inv.wood < 3 || state.inv.helmet > 0) return;
+      state.inv.stone -= 5; state.inv.wood -= 3; state.inv.helmet = 1; state.player.helmetEquipped = true;
+      AudioEngine.playPickup(); showToast('🪖 Demir Şövalye Kaskı takıldı! (%45 Zırh)', 'cyan');
+      updateCraftingModal(); updateHUD();
+    });
+    document.getElementById('btnCraftTent').addEventListener('click', () => {
+      if (state.inv.wood < 6 || state.inv.stone < 3) return;
+      state.inv.wood -= 6; state.inv.stone -= 3; state.inv.tent += 1;
+      AudioEngine.playPickup(); showToast('⛺ Çadır eklendi (6 tuşuyla kur).', 'gold');
+      updateCraftingModal(); updateHUD();
+    });
+    document.getElementById('btnCraftPotion').addEventListener('click', () => {
+      if (state.inv.berry < 3 || state.inv.essence < 2) return;
+      state.inv.berry -= 3; state.inv.essence -= 2;
+      state.player.hp = Math.min(state.player.maxHp, state.player.hp + 55);
+      state.player.mana = Math.min(state.player.maxMana, state.player.mana + 60);
+      state.player.thirst = Math.min(100, state.player.thirst + 35);
+      AudioEngine.playPickup(); showToast('🧪 Şifa & Büyü İksiri içildi!', 'cyan');
+      updateCraftingModal(); updateHUD();
+    });
+
+    // ==================== HUD UPDATE ====================
+    function updateHUD() {
+      if (!state) return;
+      const p = state.player;
+      elLvlPill.textContent = `Sv. ${p.level}`;
+      elXpFill.style.width = `${(p.xp / p.xpNext) * 100}%`;
+      elXpVal.textContent = `${p.xp}/${p.xpNext}`;
+
+      elHpBar.style.width = `${(p.hp / p.maxHp) * 100}%`; elHpVal.textContent = Math.ceil(p.hp);
+      elManaBar.style.width = `${(p.mana / p.maxMana) * 100}%`; elManaVal.textContent = Math.floor(p.mana);
+      elHungerBar.style.width = `${p.hunger}%`; elHungerVal.textContent = Math.ceil(p.hunger);
+      elThirstBar.style.width = `${p.thirst}%`; elThirstVal.textContent = Math.ceil(p.thirst);
+
+      elArmorBadge.textContent = p.helmetEquipped ? '🪖 %45' : '🛡️ %0';
+      elArmorBadge.className = 'badge' + (p.helmetEquipped ? ' active' : '');
+
+      if (p.gauntletMode === 'draw') { elGauntletBadge.textContent = '✍️ Rün Çizimi'; elGauntletBadge.className = 'badge gold'; }
+      else if (p.gauntletMode === 'telekinesis') { elGauntletBadge.textContent = '🔮 Telekinezi'; elGauntletBadge.className = 'badge violet'; }
+      else if (p.element === 'fire') { elGauntletBadge.textContent = '🔥 Ateş'; elGauntletBadge.className = 'badge fire'; }
+      else if (p.element === 'ice') { elGauntletBadge.textContent = '❄️ Buz'; elGauntletBadge.className = 'badge ice'; }
+      else { elGauntletBadge.textContent = '⚡ Arkana'; elGauntletBadge.className = 'badge active'; }
+
+      if (state.dragon.mounted && state.scene === 'overworld') {
+        elMountBadge.style.display = 'inline-flex';
+        elMountBadge.textContent = state.dragon.flying ? '🐉 Yüksek Uçuş' : '🐉 Ejderha';
+        elFlightToggleBtn.classList.add('visible');
+        elFlightToggleBtn.textContent = state.dragon.flying ? '🐉 Shift — Alçal' : '🐉 Shift — Gökyüzüne Yüksel';
+      } else {
+        elMountBadge.style.display = 'none';
+        elFlightToggleBtn.classList.remove('visible');
+      }
+
+      if (state.scene === 'cave') elTimeBadge.textContent = `💎 ${state.activeCave.name}`;
+      else {
+        const t = state.timeOfDay;
+        let phaseText = 'Gündüz', phaseIcon = '☀️';
+        if (t >= 0.48 && t < 0.60) { phaseText = 'Günbatımı'; phaseIcon = '🌇'; }
+        else if (t >= 0.60 && t < 0.90) { phaseText = 'Gece'; phaseIcon = '🌙'; }
+        else if (t >= 0.90 || t < 0.10) { phaseText = 'Şafak'; phaseIcon = '🌅'; }
+        elTimeBadge.textContent = `${phaseIcon} Gün ${state.dayCount} • ${phaseText}`;
+      }
+
+      const doneCount = [state.seals.frog, state.seals.magma, state.seals.glacier].filter(Boolean).length;
+      if (doneCount === 3) elQuestText.textContent = '🏆 Üç Kadim Mühür tamamlandı!';
+      else if (state.boss && state.boss.hp > 0) elQuestText.textContent = `${state.boss.name}'nı yen!`;
+      else if (state.inv.horn === 0) elQuestText.textContent = `Mühürler (${doneCount}/3) • Antik Harabe'deki Borozan'ı bul`;
+      else elQuestText.textContent = `Mühürler (${doneCount}/3) • Bataklık, Volkan & Buzul Boss'larını yen`;
+
+      if (state.boss && state.boss.hp > 0 && state.scene === 'overworld') {
+        elBossBarWrap.classList.add('visible');
+        elBossNameText.textContent = state.boss.name;
+        elBossHpText.textContent = `${Math.ceil(state.boss.hp)} / ${state.boss.maxHp}`;
+        elBossHpFill.style.width = `${(state.boss.hp / state.boss.maxHp) * 100}%`;
+      } else elBossBarWrap.classList.remove('visible');
+
+      document.getElementById('cntBerry').textContent = state.inv.berry;
+      document.getElementById('cntWater').textContent = state.inv.water;
+      document.getElementById('cntMeat').textContent = state.inv.meat;
+      document.getElementById('cntHelmet').textContent = state.inv.helmet;
+      document.getElementById('cntHorn').textContent = state.inv.horn;
+      document.getElementById('cntTent').textContent = state.inv.tent;
+
+      document.getElementById('slotHelmet').classList.toggle('locked', state.inv.helmet <= 0);
+      document.getElementById('slotHelmet').classList.toggle('active', p.helmetEquipped);
+      document.getElementById('slotHorn').classList.toggle('locked', state.inv.horn <= 0);
+      document.getElementById('slotHorn').classList.toggle('active', state.inv.horn > 0);
+      document.getElementById('slotTele').classList.toggle('active-violet', p.gauntletMode === 'telekinesis');
+      document.getElementById('slotDraw').classList.toggle('active-gold', p.gauntletMode === 'draw');
+
+      const slotElem = document.getElementById('slotElem');
+      slotElem.className = 'slot' + (p.gauntletMode === 'bolt' ? (p.element === 'fire' ? ' active-fire' : p.element === 'ice' ? ' active-ice' : ' active') : '');
+      document.getElementById('elemIcon').textContent = p.element === 'fire' ? '🔥' : p.element === 'ice' ? '❄️' : '⚡';
+      document.getElementById('elemLabel').textContent = p.element === 'fire' ? 'Ateş' : p.element === 'ice' ? 'Buz' : 'Arkana';
+      document.getElementById('cntElem').textContent = p.unlockedElements.length;
+    }
+
+    // ==================== UPDATE LOOP ====================
+    function isPointBlockedOverworld(x, y, pad = 6) {
+      for (const l of state.lakes) {
+        if (l.isSwamp) continue;
+        const dx = (x - l.x) / (l.rx + pad), dy = (y - l.y) / (l.ry + pad);
+        if (dx * dx + dy * dy < 1) return true;
+      }
+      if (Math.hypot(x - state.volcanoPos.x, y - state.volcanoPos.y) < 115) return true;
+      return false;
+    }
+
+    function update(dt) {
+      if (!state.started || state.paused || state.gameOver) return;
+
+      state.elapsed += dt;
+      if (state.shake > 0) state.shake = Math.max(0, state.shake - dt * 28);
+      if (state.hornCooldown > 0) state.hornCooldown = Math.max(0, state.hornCooldown - dt);
+
+      const prevT = state.timeOfDay;
+      state.timeOfDay = (state.timeOfDay + dt / DAY_LENGTH) % 1;
+      if (state.timeOfDay < prevT) { state.dayCount++; showToast(`🌅 Gün ${state.dayCount} başladı!`, 'gold'); }
+
+      const p = state.player, dr = state.dragon;
+      if (p.shootCd > 0) p.shootCd -= dt;
+      if (p.dashCd > 0) p.dashCd -= dt;
+      if (p.shieldCd > 0) p.shieldCd -= dt;
+      if (p.shieldTimer > 0) p.shieldTimer -= dt;
+      if (p.hurtFlash > 0) p.hurtFlash -= dt;
+      if (p.invuln > 0) p.invuln -= dt;
+      if (dr.flameCd > 0) dr.flameCd -= dt;
+
+      let inSafeZone = false;
+      if (state.scene === 'overworld' && dr.altitude < 0.3) {
+        for (const t of state.tents) if (Math.hypot(p.x - t.x, p.y - t.y) < t.radius) inSafeZone = true;
+        for (const v of state.villages) if (Math.hypot(p.x - v.x, p.y - v.y) < v.radius) inSafeZone = true;
+      }
+
+      // NERFED Mana Regeneration (5.5/s outside, 10/s in safe zones)
+      const baseRegen = inSafeZone ? 10.0 : 5.5;
+      p.mana = Math.min(p.maxMana, p.mana + dt * baseRegen * p.manaRegenBonus);
+
+      if (inSafeZone && p.hp < p.maxHp) {
+        p.hp = Math.min(p.maxHp, p.hp + dt * 9);
+        if (Math.random() < dt * 4) spawnParticles(p.x, p.y - 8, '#4ade80', 1, 35, 3);
+      }
+
+      p.hunger = Math.max(0, p.hunger - dt * 0.45);
+      p.thirst = Math.max(0, p.thirst - dt * 0.58);
+      if (p.hunger <= 0 || p.thirst <= 0) { p.hp = Math.max(0, p.hp - dt * 3.2); if (p.hp <= 0) triggerGameOver(false); }
+
+      const targetAlt = (state.scene === 'overworld' && dr.mounted && dr.flying) ? 1.0 : 0.0;
+      dr.altitude += (targetAlt - dr.altitude) * Math.min(1, dt * 3.4);
+      state.targetZoom = state.scene === 'cave' ? 1.08 : (1.0 - dr.altitude * 0.45);
+      state.cameraZoom += (state.targetZoom - state.cameraZoom) * Math.min(1, dt * 3.8);
+
+      let mx = 0, my = 0;
+      if (keys['KeyW'] || keys['ArrowUp']) my -= 1;
+      if (keys['KeyS'] || keys['ArrowDown']) my += 1;
+      if (keys['KeyA'] || keys['ArrowLeft']) mx -= 1;
+      if (keys['KeyD'] || keys['ArrowRight']) mx += 1;
+      if (touchStick.active) { mx += touchStick.dx; my += touchStick.dy; }
+      const len = Math.hypot(mx, my);
+      if (len > 0.05) { mx /= Math.max(1, len); my /= Math.max(1, len); }
+
+      let moveVx, moveVy;
+      if (p.dashTimer > 0) {
+        p.dashTimer -= dt; moveVx = p.dashVx; moveVy = p.dashVy;
+        state.afterimages.push({ x: p.x, y: p.y, life: 0.22 });
+      } else {
+        let speedMult = 1;
+        if (state.scene === 'overworld' && dr.mounted) speedMult = dr.altitude > 0.2 ? dr.speedAir : dr.speedGround;
+        moveVx = mx * p.baseSpeed * speedMult;
+        moveVy = my * p.baseSpeed * speedMult;
+      }
+
+      const maxW = state.scene === 'cave' ? CAVE_W - 75 : WORLD_SIZE - 65;
+      const maxH = state.scene === 'cave' ? CAVE_H - 65 : WORLD_SIZE - 65;
+      const minB = state.scene === 'cave' ? 75 : 65;
+      const nextX = Math.max(minB, Math.min(maxW, p.x + moveVx * dt));
+      const nextY = Math.max(minB, Math.min(maxH, p.y + moveVy * dt));
+      const isAirborne = state.scene === 'overworld' && dr.mounted && dr.altitude > 0.25;
+
+      if (state.scene === 'cave' || isAirborne || !isPointBlockedOverworld(nextX, p.y, 10)) p.x = nextX;
+      if (state.scene === 'cave' || isAirborne || !isPointBlockedOverworld(p.x, nextY, 10)) p.y = nextY;
+
+      if (state.scene === 'overworld' && !isAirborne) {
+        for (const r of state.resources) {
+          if (r.type === 'bush') continue;
+          const dx = p.x - r.x, dy = p.y - r.y, dist = Math.hypot(dx, dy), minD = p.r + r.r * 0.6;
+          if (dist < minD && dist > 0.01) { p.x += (dx / dist) * (minD - dist); p.y += (dy / dist) * (minD - dist); }
+        }
+      }
+
+      if (len > 0.1) { p.walkPhase += dt * 10; if (dr.mounted) dr.angle = Math.atan2(my, mx); }
+      dr.wingPhase += dt * (dr.altitude > 0.15 ? 7.5 : 2.2);
+      if (dr.mounted && state.scene === 'overworld') {
+        dr.x = p.x; dr.y = p.y;
+        if (dr.altitude > 0.25) {
+          dr.flapTimer -= dt;
+          if (dr.flapTimer <= 0) { dr.flapTimer = 0.88; AudioEngine.playWingFlap(); }
+          if (Math.random() < dt * 10) spawnParticles(p.x - Math.cos(dr.angle) * 32, p.y - Math.sin(dr.angle) * 32, '#fb923c', 1, 35, 3.5);
+        }
+      }
+
+      p.aimAngle = Math.atan2(mouse.y - viewH / 2, mouse.x - viewW / 2);
+
+      if (mouse.down) {
+        if (p.gauntletMode === 'draw' && !dr.mounted) continueRuneDraw();
+        else if (p.gauntletMode === 'bolt' || (dr.mounted && state.scene === 'overworld')) fireMagicGauntlets();
+      }
+
+      if (state.scene === 'overworld') updateShard(dt);
+      updateActiveRuneLines(dt);
+
+      if (state.scene === 'overworld') {
+        for (const cl of state.clouds) { cl.x += cl.speed * dt; if (cl.x > WORLD_SIZE + 250) cl.x = -250; }
+        for (const g of state.geysers) {
+          g.timer -= dt;
+          if (g.timer <= 0) { g.erupting = g.eruptDur; g.timer = g.period; }
+          if (g.erupting > 0) {
+            g.erupting -= dt;
+            if (Math.random() < dt * 22) state.particles.push({ x: g.x + (Math.random() - 0.5) * 18, y: g.y - Math.random() * 20, vx: (Math.random() - 0.5) * 40, vy: -140 - Math.random() * 130, color: '#e0f2fe', size: 4 + Math.random() * 5, life: 0.6, maxLife: 0.9 });
+            if (!isAirborne && Math.hypot(p.x - g.x, p.y - g.y) < g.r + 10) damagePlayer(10);
+          }
+        }
+        for (const w of state.wildlife) {
+          w.hop += dt * 7; w.timer -= dt;
+          if (Math.hypot(p.x - w.x, p.y - w.y) < 150) { w.angle = Math.atan2(w.y - p.y, w.x - p.x); w.vx = Math.cos(w.angle) * 130; w.vy = Math.sin(w.angle) * 130; }
+          else { if (w.timer <= 0) { w.angle = Math.random() * Math.PI * 2; w.timer = 1.5 + Math.random() * 3; } w.vx = Math.cos(w.angle) * 32; w.vy = Math.sin(w.angle) * 32; }
+          const nx = Math.max(120, Math.min(WORLD_SIZE - 120, w.x + w.vx * dt)), ny = Math.max(120, Math.min(WORLD_SIZE - 120, w.y + w.vy * dt));
+          if (!isPointBlockedOverworld(nx, ny, 14)) { w.x = nx; w.y = ny; }
+        }
+      }
+
+      for (const wd of state.weatherDrops) {
+        wd.y += 220 * wd.sp * dt; wd.x -= 45 * wd.sp * dt;
+        if (wd.y > viewH + 20) { wd.y = -20; wd.x = Math.random() * (viewW + 160); }
+        if (wd.x < -20) wd.x = viewW + 20;
+      }
+      for (const r of state.resources) { if (r.hitFlash > 0) r.hitFlash -= dt; if (r.type === 'bush' && !r.hasFruit) { r.regrowTimer -= dt; if (r.regrowTimer <= 0) r.hasFruit = true; } }
+
+      // Update Projectiles
+      const activeCreatures = state.scene === 'cave' ? state.caveCreatures : state.creatures;
+      for (let i = state.projectiles.length - 1; i >= 0; i--) {
+        const proj = state.projectiles[i];
+        // Slight homing for Sky Sentinel anti-air lightning!
+        if (proj.homing) {
+          const ang = Math.atan2(p.y - proj.y, p.x - proj.x);
+          proj.vx += Math.cos(ang) * 420 * dt;
+          proj.vy += Math.sin(ang) * 420 * dt;
+          const sp = Math.hypot(proj.vx, proj.vy);
+          if (sp > 390) { proj.vx = (proj.vx / sp) * 390; proj.vy = (proj.vy / sp) * 390; }
+        }
+        proj.x += proj.vx * dt; proj.y += proj.vy * dt; proj.life -= dt;
+        const pCol = proj.color || (proj.element === 'fire' || proj.element === 'dragon_fire' ? '#fb923c' : proj.element === 'ice' ? '#7dd3fc' : '#99f6e4');
+        if (Math.random() < 0.45) spawnParticles(proj.x, proj.y, pCol, 1, 25, 2.8);
+
+        let hit = false;
+        if (proj.fromEnemy) {
+          if (Math.hypot(proj.x - p.x, proj.y - p.y) < p.r + proj.r + (proj.hitsAir && isAirborne ? 14 : 0)) {
+            damagePlayer(proj.damage, !!proj.hitsAir);
+            hit = true;
+          }
+        } else {
+          if (state.scene === 'overworld' && state.boss && state.boss.hp > 0 && state.boss.leapZ < 35) {
+            if (Math.hypot(proj.x - state.boss.x, proj.y - state.boss.y) < state.boss.r + proj.r) {
+              damageBoss(proj.damage, proj.x, proj.y, pCol, proj.element); hit = true;
+            }
+          }
+          if (!hit) {
+            for (let j = activeCreatures.length - 1; j >= 0; j--) {
+              const c = activeCreatures[j];
+              if (Math.hypot(proj.x - c.x, proj.y - c.y) < c.r + proj.r) {
+                const pushA = Math.atan2(proj.vy, proj.vx);
+                damageCreature(activeCreatures, j, proj.damage, Math.cos(pushA) * 120, Math.sin(pushA) * 120, pCol, proj.element);
+                hit = true; break;
+              }
+            }
+          }
+          if (!hit && state.scene === 'overworld') {
+            for (const r of state.resources) {
+              if (r.type === 'bush') continue;
+              if (Math.hypot(proj.x - r.x, proj.y - r.y) < r.r + proj.r) { harvestResource(r, 15); hit = true; break; }
+            }
+          }
+        }
+        if (hit || proj.life <= 0) state.projectiles.splice(i, 1);
+      }
+
+      // Update Active Creatures (Melee, Ranged, Anti-Air!)
+      const nightAggro = isNight();
+      for (let i = activeCreatures.length - 1; i >= 0; i--) {
+        const c = activeCreatures[i];
+        c.anim += dt * 6;
+        if (c.hitFlash > 0) c.hitFlash -= dt;
+        if (c.atkCd > 0) c.atkCd -= dt;
+        if (c.slowTimer > 0) c.slowTimer -= dt;
+        if (c.burnTimer > 0) {
+          c.burnTimer -= dt;
+          if (Math.random() < dt * 7) {
+            spawnParticles(c.x, c.y - 6, '#f97316', 1, 35, 3);
+            c.hp -= 1.8;
+            if (c.hp <= 0) { damageCreature(activeCreatures, i, 1, 0, 0, '#fb923c', 'fire'); continue; }
+          }
+        }
+
+        let repelled = false;
+        if (state.scene === 'overworld' && c.role !== 'antiair') {
+          for (const t of state.tents) { const dx = c.x - t.x, dy = c.y - t.y, d = Math.hypot(dx, dy); if (d < t.radius + 26 && d > 0.1) { c.vx += (dx / d) * 520 * dt; c.vy += (dy / d) * 520 * dt; repelled = true; } }
+          for (const v of state.villages) { const dx = c.x - v.x, dy = c.y - v.y, d = Math.hypot(dx, dy); if (d < v.radius + 30 && d > 0.1) { c.vx += (dx / d) * 520 * dt; c.vy += (dy / d) * 520 * dt; repelled = true; } }
+        }
+
+        const distP = Math.hypot(p.x - c.x, p.y - c.y);
+        const angP = Math.atan2(p.y - c.y, p.x - c.x);
+        const aggroRange = c.role === 'antiair' ? 560 : (nightAggro ? 450 : 310);
+        const slowMult = c.slowTimer > 0 ? 0.45 : 1.0;
+        const speedM = (nightAggro ? 1.25 : 1.0) * slowMult;
+        const canTargetPlayer = (!isAirborne || c.role === 'antiair') && !inSafeZone && distP < aggroRange;
+        c.lockTarget = canTargetPlayer && c.kind === 'sky_sentinel';
+
+        if (!repelled && canTargetPlayer) {
+          c.facing = angP;
+          if (c.kind === 'sky_sentinel') {
+            // Stationary anti-air monolith fires homing sky lightning!
+            if (c.atkCd <= 0 && distP < c.range) {
+              c.atkCd = 2.1;
+              AudioEngine.playMagicShot('arcane');
+              state.projectiles.push({
+                x: c.x, y: c.y - 16, vx: Math.cos(angP) * 290, vy: Math.sin(angP) * 290,
+                r: 9, damage: c.damage, fromEnemy: true, hitsAir: true, homing: true, color: '#facc15', life: 2.3
+              });
+            }
+          } else if (c.role === 'ranged' || c.kind === 'storm_harpy') {
+            // Keeps optimal distance & fires distinct projectiles!
+            const prefDist = c.kind === 'storm_harpy' ? 190 : 230;
+            if (distP > prefDist + 35) { c.vx += Math.cos(angP) * c.speed * speedM * 4 * dt; c.vy += Math.sin(angP) * c.speed * speedM * 4 * dt; }
+            else if (distP < prefDist - 45) { c.vx -= Math.cos(angP) * c.speed * 0.7 * 4 * dt; c.vy -= Math.sin(angP) * c.speed * 0.7 * 4 * dt; }
+
+            if (c.atkCd <= 0 && distP < c.range) {
+              if (c.kind === 'ash_cultist') {
+                c.atkCd = 2.2; AudioEngine.playMagicShot('fire');
+                for (let k = -1; k <= 1; k++) {
+                  const a = angP + k * 0.22;
+                  state.projectiles.push({ x: c.x, y: c.y, vx: Math.cos(a) * 310, vy: Math.sin(a) * 310, r: 8, damage: c.damage, fromEnemy: true, color: '#f97316', life: 1.6 });
+                }
+              } else if (c.kind === 'forest_archer') {
+                c.atkCd = 1.7; AudioEngine.playDash();
+                state.projectiles.push({ x: c.x, y: c.y, vx: Math.cos(angP) * 430, vy: Math.sin(angP) * 430, r: 6, damage: c.damage, fromEnemy: true, color: '#4ade80', life: 1.4 });
+              } else if (c.kind === 'ice_wraith') {
+                c.atkCd = 1.85; AudioEngine.playMagicShot('ice');
+                state.projectiles.push({ x: c.x, y: c.y, vx: Math.cos(angP) * 390, vy: Math.sin(angP) * 390, r: 7, damage: c.damage, fromEnemy: true, color: '#38bdf8', life: 1.5 });
+              } else if (c.kind === 'storm_harpy') {
+                c.atkCd = 1.65; AudioEngine.playWingFlap();
+                state.projectiles.push({ x: c.x, y: c.y, vx: Math.cos(angP) * 380, vy: Math.sin(angP) * 380, r: 8, damage: c.damage, fromEnemy: true, hitsAir: true, color: '#e0f2fe', life: 1.4 });
+              }
+            }
+          } else {
+            // Melee chase
+            c.vx += Math.cos(angP) * c.speed * speedM * 4 * dt;
+            c.vy += Math.sin(angP) * c.speed * speedM * 4 * dt;
+          }
+        } else if (!repelled && c.speed > 0) {
+          c.wanderTimer -= dt;
+          if (c.wanderTimer <= 0) { c.wanderAngle = Math.random() * Math.PI * 2; c.wanderTimer = 1.5 + Math.random() * 2.5; }
+          c.facing = c.wanderAngle;
+          c.vx += Math.cos(c.wanderAngle) * c.speed * 0.4 * 3 * dt;
+          c.vy += Math.sin(c.wanderAngle) * c.speed * 0.4 * 3 * dt;
+        }
+
+        if (c.speed > 0) {
+          const maxSp = c.speed * speedM, curSp = Math.hypot(c.vx, c.vy);
+          if (curSp > maxSp) { c.vx = (c.vx / curSp) * maxSp; c.vy = (c.vy / curSp) * maxSp; }
+          c.vx *= 0.92; c.vy *= 0.92;
+          const nx = Math.max(85, Math.min((state.scene === 'cave' ? CAVE_W - 85 : WORLD_SIZE - 85), c.x + c.vx * dt));
+          const ny = Math.max(85, Math.min((state.scene === 'cave' ? CAVE_H - 85 : WORLD_SIZE - 85), c.y + c.vy * dt));
+          if (state.scene === 'cave' || c.kind === 'storm_harpy' || !isPointBlockedOverworld(nx, ny, 8)) { c.x = nx; c.y = ny; }
+        }
+
+        if (canTargetPlayer && distP < p.r + c.r + 6 && c.atkCd <= 0) {
+          c.atkCd = 1.15;
+          damagePlayer(c.damage, c.role === 'antiair');
+        }
+      }
+
+      // Respawn level-scaled enemies periodically
+      if (state.scene === 'overworld' && state.creatures.length < 28 && Math.random() < dt * 0.35) {
+        const a = Math.random() * Math.PI * 2;
+        const sx = Math.max(180, Math.min(WORLD_SIZE - 180, p.x + Math.cos(a) * 820));
+        const sy = Math.max(180, Math.min(WORLD_SIZE - 180, p.y + Math.sin(a) * 820));
+        if (!isPointBlockedOverworld(sx, sy, 25)) {
+          const kinds = ['wolf', 'forest_archer', 'swamp_ghoul', 'storm_harpy', 'ash_cultist', 'ice_wraith'];
+          state.spawnCreature(sx, sy, kinds[Math.floor(Math.random() * kinds.length)], p.level);
+        }
+      }
+
+      if (state.scene === 'overworld') updateBoss(dt);
+
+      for (let i = state.afterimages.length - 1; i >= 0; i--) { state.afterimages[i].life -= dt; if (state.afterimages[i].life <= 0) state.afterimages.splice(i, 1); }
+      for (let i = state.particles.length - 1; i >= 0; i--) { const pt = state.particles[i]; pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.vx *= 0.93; pt.vy *= 0.93; pt.life -= dt; if (pt.life <= 0) state.particles.splice(i, 1); }
+      for (let i = state.waves.length - 1; i >= 0; i--) { const w = state.waves[i]; w.r += w.speed * dt; if (w.r >= w.maxR) state.waves.splice(i, 1); }
+      for (let i = state.floatingTexts.length - 1; i >= 0; i--) { const ft = state.floatingTexts[i]; ft.y -= 28 * dt; ft.life -= dt; if (ft.life <= 0) state.floatingTexts.splice(i, 1); }
+
+      const interact = findNearestInteractable();
+      if (interact) { elInteractPrompt.textContent = interact.label; elInteractPrompt.classList.add('visible'); }
+      else elInteractPrompt.classList.remove('visible');
+
+      updateHUD();
+    }
+
+    function updateActiveRuneLines(dt) {
+      const list = state.scene === 'cave' ? state.caveCreatures : state.creatures;
+      for (let i = state.activeRuneLines.length - 1; i >= 0; i--) {
+        const rl = state.activeRuneLines[i];
+        rl.life -= dt;
+        rl.tickCd -= dt;
+        const col = rl.element === 'fire' ? '#f97316' : rl.element === 'ice' ? '#38bdf8' : '#c084fc';
+        if (Math.random() < dt * 18) {
+          const pt = rl.points[Math.floor(Math.random() * rl.points.length)];
+          spawnParticles(pt.x, pt.y, col, 1, 40, 3);
+        }
+        if (rl.tickCd <= 0) {
+          rl.tickCd = 0.42;
+          const tickDmg = Math.round(16 * state.player.runePowerBonus);
+          for (let j = list.length - 1; j >= 0; j--) {
+            const c = list[j];
+            for (const pt of rl.points) {
+              if (Math.hypot(c.x - pt.x, c.y - pt.y) < c.r + 24) {
+                damageCreature(list, j, tickDmg, 0, 0, col, rl.element);
+                break;
+              }
+            }
+          }
+          if (state.boss && state.boss.hp > 0) {
+            for (const pt of rl.points) {
+              if (Math.hypot(state.boss.x - pt.x, state.boss.y - pt.y) < state.boss.r + 22) {
+                damageBoss(tickDmg, pt.x, pt.y, col, rl.element);
+                break;
+              }
+            }
+          }
+        }
+        if (rl.life <= 0) state.activeRuneLines.splice(i, 1);
+      }
+    }
+
+    function updateShard(dt) {
+      const sh = state.shard, p = state.player;
+      if (sh.recallCd > 0) sh.recallCd -= dt;
+      const wm = screenToWorld(mouse.x, mouse.y);
+      sh.hovered = (p.gauntletMode === 'telekinesis' && sh.teleState === 'ground' && Math.hypot(wm.x - sh.x, wm.y - sh.y) < sh.r + 28);
+
+      if (sh.teleState === 'lifting') {
+        sh.z += (44 - sh.z) * Math.min(1, dt * 7); sh.floatPhase += dt * 4.5;
+        if (Math.abs(44 - sh.z) < 2) sh.teleState = 'floating';
+      } else if (sh.teleState === 'floating') {
+        sh.floatPhase += dt * 4.4; sh.z = 44 + Math.sin(sh.floatPhase) * 6.5;
+      } else if (sh.teleState === 'flying') {
+        const distTotal = Math.max(80, Math.hypot(sh.flyTargetX - sh.flyStartX, sh.flyTargetY - sh.flyStartY));
+        sh.flyProgress += (700 * dt) / distTotal;
+        const t = Math.min(1, sh.flyProgress);
+        const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        sh.x = sh.flyStartX + (sh.flyTargetX - sh.flyStartX) * ease;
+        sh.y = sh.flyStartY + (sh.flyTargetY - sh.flyStartY) * ease;
+        sh.z = 44 * (1 - t) + Math.sin(t * Math.PI) * 54;
+        if (Math.random() < dt * 45) spawnParticles(sh.x, sh.y - sh.z, '#c084fc', 1, 45, 3.8);
+        hitMonstersWithShard(sh, 42); // Nerfed throw damage!
+        if (t >= 1) {
+          sh.teleState = 'ground'; sh.z = 0; sh.hitSet = null;
+          state.shake = Math.max(state.shake, 7); AudioEngine.playSlam();
+          state.waves.push({ x: sh.x, y: sh.y, r: 14, maxR: 84, speed: 300, color: 'rgba(192,132,252,0.8)', width: 3 });
+        }
+      } else if (sh.teleState === 'returning') {
+        const tx = p.x + Math.cos(p.aimAngle) * 54, ty = p.y + Math.sin(p.aimAngle) * 54;
+        const dx = tx - sh.x, dy = ty - sh.y, d = Math.hypot(dx, dy);
+        sh.z += (44 - sh.z) * Math.min(1, dt * 8);
+        if (Math.random() < dt * 40) spawnParticles(sh.x, sh.y - sh.z, '#5eead4', 1, 40, 3.5);
+        hitMonstersWithShard(sh, 30); // Nerfed recall damage!
+        if (d < 28) { sh.x = tx; sh.y = ty; sh.teleState = 'floating'; sh.hitSet = null; AudioEngine.playPickup(); }
+        else { const sp = Math.min(d / dt, 820); sh.x += (dx / d) * sp * dt; sh.y += (dy / d) * sp * dt; }
+      }
+    }
+
+    function hitMonstersWithShard(sh, dmg) {
+      for (let j = state.creatures.length - 1; j >= 0; j--) {
+        const c = state.creatures[j];
+        if (sh.hitSet && sh.hitSet.has(c.id)) continue;
+        if (Math.hypot(sh.x - c.x, sh.y - c.y) < sh.r + c.r + 14) {
+          if (sh.hitSet) sh.hitSet.add(c.id);
+          damageCreature(state.creatures, j, dmg, 0, 0, '#e879f9', 'arcane');
+        }
+      }
+      if (state.boss && state.boss.hp > 0 && (!sh.hitSet || !sh.hitSet.has('boss'))) {
+        if (Math.hypot(sh.x - state.boss.x, sh.y - state.boss.y) < sh.r + state.boss.r + 12) {
+          if (sh.hitSet) sh.hitSet.add('boss');
+          damageBoss(dmg, sh.x, sh.y, '#e879f9', 'arcane');
+        }
+      }
+    }
+
+    function damageCreature(list, idx, rawAmount, knockX, knockY, color, element = 'arcane') {
+      const c = list[idx]; if (!c) return;
+      const dmg = Math.max(1, Math.round(rawAmount * (c.armorMult || 1)));
+      c.hp -= dmg; c.hitFlash = 0.16; c.vx += knockX; c.vy += knockY;
+      if (element === 'fire' || element === 'dragon_fire') c.burnTimer = 3.2;
+      if (element === 'ice') c.slowTimer = 3.2;
+      spawnParticles(c.x, c.y, color, 8, 110, 3.6);
+      addFloatingText(c.x, c.y - 20, `-${dmg}`, color);
+      AudioEngine.playHit(dmg > 32);
+      if (c.hp <= 0) {
+        state.kills++;
+        state.inv.essence += (c.rune || c.role === 'antiair' || c.kind === 'lava_golem') ? 2 : 1;
+        if (Math.random() < 0.5) state.inv.meat += 1;
+        gainXP(c.xpReward || 30);
+        addFloatingText(c.x, c.y - 34, `+${c.xpReward || 30} XP`, '#fef08a');
+        spawnParticles(c.x, c.y, color, 16, 130, 4.5);
+        list.splice(idx, 1);
+      }
+    }
+
+    function damageBoss(amount, hx, hy, color, element = 'arcane') {
+      const b = state.boss; if (!b || b.hp <= 0) return;
+      b.hp = Math.max(0, b.hp - amount); b.hitFlash = 0.15;
+      if (element === 'fire' || element === 'dragon_fire') b.burnTimer = 3.0;
+      if (element === 'ice') b.slowTimer = 2.5;
+      spawnParticles(hx, hy, color, 10, 125, 4.2);
+      addFloatingText(b.x + (Math.random() - 0.5) * 30, b.y - 45, `-${Math.round(amount)}`, color);
+      AudioEngine.playHit(amount > 32);
+      if (b.hp <= 0) {
+        spawnParticles(b.x, b.y, color, 44, 240, 7); AudioEngine.playSlam(); state.shake = 18;
+        const defeated = b; state.boss = null; onBossDefeated(defeated);
+      }
+    }
+
+    function updateBoss(dt) {
+      const b = state.boss; if (!b || b.hp <= 0) return;
+      const p = state.player;
+      b.breathePhase += dt * 4.5;
+      if (b.hitFlash > 0) b.hitFlash -= dt;
+      if (b.slowTimer > 0) b.slowTimer -= dt;
+      if (b.burnTimer > 0) { b.burnTimer -= dt; if (Math.random() < dt * 6) { spawnParticles(b.x, b.y - 10, '#f97316', 1, 45, 4); b.hp = Math.max(1, b.hp - 2); } }
+
+      const enraged = b.hp < b.maxHp * 0.5;
+      const speedScale = (enraged ? 1.28 : 1.0) * (b.slowTimer > 0 ? 0.65 : 1.0);
+      const distP = Math.hypot(p.x - b.x, p.y - b.y), angToP = Math.atan2(p.y - b.y, p.x - b.x);
+
+      if (b.state === 'idle') {
+        b.facing = angToP; b.stateTimer -= dt * speedScale;
+        if (distP > 230) { b.x += Math.cos(angToP) * 68 * speedScale * dt; b.y += Math.sin(angToP) * 68 * speedScale * dt; }
+        if (b.stateTimer <= 0) {
+          if (b.kind === 'frog') {
+            if (distP > 280 || Math.random() < 0.48) {
+              b.state = 'leap_charge'; b.stateTimer = 0.65; b.leapStartX = b.x; b.leapStartY = b.y;
+              const clampD = Math.min(distP, 380);
+              b.leapTargetX = Math.max(120, Math.min(WORLD_SIZE - 120, b.x + Math.cos(angToP) * clampD));
+              b.leapTargetY = Math.max(120, Math.min(WORLD_SIZE - 120, b.y + Math.sin(angToP) * clampD));
+              AudioEngine.playBossRoar();
+            } else { b.state = 'tongue_charge'; b.stateTimer = 0.55; b.tongueAngle = angToP; b.tongueLen = 0; b.tongueHitDone = false; AudioEngine.playBossRoar(); }
+          } else if (b.kind === 'magma') {
+            AudioEngine.playSlam(); state.shake = 10;
+            state.waves.push({ x: b.x, y: b.y, r: 30, maxR: 260, speed: 340, color: 'rgba(249,115,22,0.9)', width: 6 });
+            if (distP < 220) damagePlayer(26);
+            const shots = enraged ? 10 : 7;
+            for (let k = 0; k < shots; k++) {
+              const a = angToP + (k / shots) * Math.PI * 2;
+              state.projectiles.push({ x: b.x, y: b.y, vx: Math.cos(a) * 320, vy: Math.sin(a) * 320, r: 10, damage: 20, element: 'fire', fromEnemy: true, hitsAir: true, life: 1.8 });
+            }
+            b.stateTimer = 1.6;
+          } else {
+            AudioEngine.playMagicShot('ice');
+            state.waves.push({ x: b.x, y: b.y, r: 24, maxR: 240, speed: 360, color: 'rgba(56,189,248,0.9)', width: 5 });
+            if (distP < 200) damagePlayer(22);
+            const count = enraged ? 7 : 5;
+            for (let k = 0; k < count; k++) {
+              const a = angToP + (k - (count - 1) / 2) * 0.24;
+              state.projectiles.push({ x: b.x, y: b.y, vx: Math.cos(a) * 410, vy: Math.sin(a) * 410, r: 9, damage: 18, element: 'ice', fromEnemy: true, hitsAir: true, life: 1.7 });
+            }
+            b.stateTimer = 1.45;
+          }
+        }
+      } else if (b.state === 'tongue_charge') {
+        b.tongueAngle = angToP; b.facing = b.tongueAngle; b.stateTimer -= dt;
+        if (b.stateTimer <= 0) { b.state = 'tongue_strike'; b.stateTimer = 0.55; }
+      } else if (b.state === 'tongue_strike') {
+        b.stateTimer -= dt;
+        const prog = 1 - b.stateTimer / 0.55;
+        b.tongueLen = (prog < 0.38 ? prog / 0.38 : Math.max(0, 1 - (prog - 0.38) / 0.62)) * b.tongueMaxLen;
+        if (!b.tongueHitDone && b.tongueLen > 40) {
+          const tx = b.x + Math.cos(b.tongueAngle) * b.tongueLen, ty = b.y + Math.sin(b.tongueAngle) * b.tongueLen;
+          if (Math.hypot(p.x - tx, p.y - ty) < 36) { b.tongueHitDone = true; damagePlayer(24); spawnParticles(p.x, p.y, '#f472b6', 14, 130, 4.5); }
+        }
+        if (b.stateTimer <= 0) { b.tongueLen = 0; b.state = 'idle'; b.stateTimer = 1.1; }
+      } else if (b.state === 'leap_charge') {
+        b.stateTimer -= dt; if (b.stateTimer <= 0) { b.state = 'leaping'; b.leapProgress = 0; }
+      } else if (b.state === 'leaping') {
+        b.leapProgress += dt * 1.3; const t = Math.min(1, b.leapProgress);
+        b.x = b.leapStartX + (b.leapTargetX - b.leapStartX) * t;
+        b.y = b.leapStartY + (b.leapTargetY - b.leapStartY) * t;
+        b.leapZ = Math.sin(t * Math.PI) * 145;
+        if (t >= 1) {
+          b.leapZ = 0; state.shake = 14; AudioEngine.playSlam();
+          state.waves.push({ x: b.x, y: b.y, r: 25, maxR: 165, speed: 360, color: 'rgba(74,222,128,0.85)', width: 5 });
+          if (Math.hypot(p.x - b.x, p.y - b.y) < 135) damagePlayer(30);
+          b.state = 'idle'; b.stateTimer = 1.2;
+        }
+      }
+    }
+
+    // ==================== RENDERING ====================
+    function drawWorld() {
+      ctx.save(); ctx.scale(dpr, dpr);
+      if (state.scene === 'cave') drawCaveInterior();
+      else drawOverworld();
+      drawLightingOverlay();
+      if (state.scene === 'overworld') drawWeather();
+      ctx.restore();
+      drawMinimap();
+    }
+
+    function drawCaveInterior() {
+      const p = state.player, z = state.cameraZoom;
+      ctx.fillStyle = '#090d14'; ctx.fillRect(0, 0, viewW, viewH);
+      ctx.save(); ctx.translate(viewW / 2, viewH / 2); ctx.scale(z, z); ctx.translate(-p.x, -p.y);
+      ctx.fillStyle = '#1e293b'; ctx.beginPath(); ctx.roundRect(50, 50, CAVE_W - 100, CAVE_H - 100, 48); ctx.fill();
+      ctx.strokeStyle = '#475569'; ctx.lineWidth = 18; ctx.stroke();
+      ctx.fillStyle = 'rgba(94,234,212,0.25)'; ctx.beginPath(); ctx.arc(CAVE_W / 2, CAVE_H - 55, 48, 0, Math.PI * 2); ctx.fill();
+      ctx.font = 'bold 13px Inter, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#5eead4'; ctx.fillText('🌿 ÇIKIŞ (E)', CAVE_W / 2, CAVE_H - 52);
+      for (const cr of state.caveCrystals) {
+        ctx.save(); ctx.translate(cr.x, cr.y); ctx.shadowColor = cr.color; ctx.shadowBlur = 18; ctx.fillStyle = cr.color;
+        [[-10, 6, 18], [0, 0, 26], [10, 8, 16]].forEach(([cx, cy, ch]) => { ctx.beginPath(); ctx.moveTo(cx - 6, cy + 8); ctx.lineTo(cx, cy - ch); ctx.lineTo(cx + 6, cy + 8); ctx.closePath(); ctx.fill(); });
+        ctx.restore();
+      }
+      drawActiveRuneLines();
+      for (const c of state.caveCreatures) drawCreature(c);
+      drawPlayer();
+      drawCombatEffects();
+      ctx.restore();
+    }
+
+    function drawOverworld() {
+      const p = state.player, z = state.cameraZoom;
+      const shakeX = state.shake > 0 ? (Math.random() - 0.5) * state.shake : 0;
+      const shakeY = state.shake > 0 ? (Math.random() - 0.5) * state.shake : 0;
+
+      ctx.fillStyle = '#254830'; ctx.fillRect(0, 0, viewW, viewH);
+      ctx.save(); ctx.translate(viewW / 2 + shakeX, viewH / 2 + shakeY); ctx.scale(z, z); ctx.translate(-p.x, -p.y);
+
+      const halfW = (viewW / 2) / z + 180, halfH = (viewH / 2) / z + 180;
+      const minX = p.x - halfW, maxX = p.x + halfW, minY = p.y - halfH, maxY = p.y + halfH;
+
+      const tileSize = 120;
+      for (let r = Math.max(0, Math.floor(minY / tileSize)); r < Math.min(Math.ceil(WORLD_SIZE / tileSize), Math.ceil(maxY / tileSize)); r++) {
+        for (let c = Math.max(0, Math.floor(minX / tileSize)); c < Math.min(Math.ceil(WORLD_SIZE / tileSize), Math.ceil(maxX / tileSize)); c++) {
+          if ((r + c) % 2 === 0) { ctx.fillStyle = 'rgba(255,255,255,0.022)'; ctx.fillRect(c * tileSize, r * tileSize, tileSize, tileSize); }
+        }
+      }
+
+      drawBiomeGrounds();
+      ctx.strokeStyle = 'rgba(234,185,99,0.35)'; ctx.lineWidth = 10; ctx.strokeRect(40, 40, WORLD_SIZE - 80, WORLD_SIZE - 80);
+
+      drawLakes(); drawVolcano(); drawSnowShrine();
+      for (const g of state.geysers) drawGeyser(g);
+      for (const c of state.caves) drawCaveEntrance(c);
+      for (const v of state.villages) drawVillage(v);
+
+      for (const d of state.decor) {
+        if (d.x < minX || d.x > maxX || d.y < minY || d.y > maxY) continue;
+        if (d.kind === 'grass') { ctx.strokeStyle = '#3b7349'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - 3, d.y - d.size * 1.8); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x + 3.5, d.y - d.size * 1.4); ctx.stroke(); }
+        else if (d.kind === 'flower') { ctx.fillStyle = d.color; ctx.beginPath(); ctx.arc(d.x, d.y, d.size * 0.65, 0, Math.PI * 2); ctx.fill(); }
+        else { ctx.fillStyle = 'rgba(148,163,184,0.32)'; ctx.beginPath(); ctx.ellipse(d.x, d.y, d.size * 0.9, d.size * 0.55, 0.4, 0, Math.PI * 2); ctx.fill(); }
+      }
+
+      drawRuins(); drawAltar();
+      for (const wr of state.worldRunes) if (!wr.collected) drawWorldRune(wr);
+      for (const t of state.tents) drawTent(t);
+      drawActiveRuneLines();
+
+      for (const r of state.resources) if (r.x > minX && r.x < maxX && r.y > minY && r.y < maxY) drawResource(r);
+      for (const w of state.wildlife) if (w.x > minX && w.x < maxX && w.y > minY && w.y < maxY) drawWildlife(w);
+      for (const npc of state.npcs) drawNpc(npc);
+
+      if (!state.dragon.mounted) drawDragon(state.dragon.x, state.dragon.y, state.dragon.angle, 0, state.dragon.wingPhase);
+      for (const c of state.creatures) if (c.x > minX && c.x < maxX && c.y > minY && c.y < maxY) drawCreature(c);
+      if (state.boss && state.boss.hp > 0) drawBoss(state.boss);
+
+      for (const ai of state.afterimages) {
+        ctx.save(); ctx.globalAlpha = ai.life * 2.2; ctx.fillStyle = '#818cf8';
+        ctx.beginPath(); ctx.arc(ai.x, ai.y, 14, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      }
+
+      const dragonHigh = state.dragon.mounted && state.dragon.altitude > 0.2;
+      if (!dragonHigh) drawPlayer();
+      drawShard();
+      drawCombatEffects();
+
+      if (state.dragon.altitude > 0.05) {
+        ctx.save(); ctx.globalAlpha = state.dragon.altitude * 0.28; ctx.fillStyle = '#f8fafc';
+        for (const cl of state.clouds) {
+          if (cl.x < minX - 200 || cl.x > maxX + 200 || cl.y < minY - 200 || cl.y > maxY + 200) continue;
+          ctx.beginPath(); ctx.ellipse(cl.x, cl.y, cl.rx, cl.ry, 0, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+      }
+      if (dragonHigh) drawPlayer();
+
+      ctx.restore();
+    }
+
+    function drawActiveRuneLines() {
+      // Currently sketching live stroke
+      if (state.runeDrawing.active && state.runeDrawing.points.length > 1) {
+        const pts = state.runeDrawing.points;
+        ctx.save();
+        ctx.strokeStyle = '#fde047';
+        ctx.lineWidth = 6;
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.setLineDash([10, 8]);
+        ctx.beginPath();
+        pts.forEach((pt, idx) => idx === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Ignited drawn magic walls/ribbons
+      for (const rl of state.activeRuneLines) {
+        const alpha = Math.min(1, rl.life / 0.8);
+        const col = rl.element === 'fire' ? '#f97316' : rl.element === 'ice' ? '#38bdf8' : '#a855f7';
+        const inner = rl.element === 'fire' ? '#fef08a' : rl.element === 'ice' ? '#f0f9ff' : '#f5d0fe';
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.shadowColor = col; ctx.shadowBlur = 20;
+        ctx.strokeStyle = col; ctx.lineWidth = rl.isCircle ? 18 : 14;
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.beginPath();
+        rl.points.forEach((pt, idx) => idx === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y));
+        if (rl.isCircle) ctx.closePath();
+        ctx.stroke();
+
+        ctx.strokeStyle = inner; ctx.lineWidth = 5;
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // ==================== REDESIGNED SLEEK TILSIMLI PARÇACIK (NO 5-GON!) ====================
+    function drawShard() {
+      const sh = state.shard;
+      const isLev = sh.teleState !== 'ground';
+
+      if (sh.teleState === 'floating' || sh.teleState === 'lifting') {
+        const wm = screenToWorld(mouse.x, mouse.y);
+        ctx.save(); ctx.strokeStyle = 'rgba(232,121,249,0.7)'; ctx.lineWidth = 3; ctx.setLineDash([10, 8]);
+        ctx.beginPath(); ctx.moveTo(sh.x, sh.y - sh.z); ctx.lineTo(wm.x, wm.y); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(192,132,252,0.22)'; ctx.strokeStyle = '#f0abfc';
+        ctx.beginPath(); ctx.arc(wm.x, wm.y, 24, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.restore();
+      }
+
+      ctx.save();
+      ctx.translate(sh.x, sh.y);
+
+      const shScale = Math.max(0.45, 1 - sh.z / 120);
+      ctx.fillStyle = 'rgba(0,0,0,0.34)';
+      ctx.beginPath(); ctx.ellipse(0, 14, 18 * shScale, 9 * shScale, 0, 0, Math.PI * 2); ctx.fill();
+
+      if (sh.hovered) {
+        ctx.strokeStyle = '#e879f9'; ctx.lineWidth = 2.5; ctx.setLineDash([6, 4]);
+        ctx.beginPath(); ctx.arc(0, 0, 32 + Math.sin(state.elapsed * 8) * 2.5, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+      }
+
+      const wobbleX = isLev ? Math.sin(sh.floatPhase * 1.4) * 3 : 0;
+      ctx.translate(wobbleX, -sh.z - (isLev ? 0 : Math.sin(state.elapsed * 3) * 3));
+
+      // Counter-rotating dual golden & amethyst rune rings
+      ctx.save();
+      ctx.shadowColor = '#c084fc'; ctx.shadowBlur = isLev ? 24 : 14;
+      ctx.strokeStyle = 'rgba(234, 185, 99, 0.88)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(0, 0, 24, 10, state.elapsed * 2.4, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = 'rgba(192, 132, 252, 0.9)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(0, 0, 24, 10, -state.elapsed * 2.8 + Math.PI / 2, 0, Math.PI * 2); ctx.stroke();
+
+      // Sleek Twin-Spire Diamond Crystal Seal (4-point elongated star spire!)
+      const spireG = ctx.createLinearGradient(0, -24, 0, 24);
+      spireG.addColorStop(0, '#f5d0fe');
+      spireG.addColorStop(0.5, '#7e22ce');
+      spireG.addColorStop(1, '#38bdf8');
+      ctx.fillStyle = spireG;
+      ctx.beginPath();
+      ctx.moveTo(0, -24);
+      ctx.lineTo(9, -5);
+      ctx.lineTo(16, 0);
+      ctx.lineTo(9, 5);
+      ctx.lineTo(0, 24);
+      ctx.lineTo(-9, 5);
+      ctx.lineTo(-16, 0);
+      ctx.lineTo(-9, -5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#fef08a'; ctx.lineWidth = 1.6; ctx.stroke();
+
+      // Glowing arcane core pearl
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath(); ctx.arc(0, 0, 4.5, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+
+      if (!isLev) {
+        ctx.font = 'bold 10.5px Inter, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#f5d0fe';
+        ctx.fillText('✦ Tılsımlı Parçacık', 0, -30);
+      }
+      ctx.restore();
+    }
+
+    // ==================== REDESIGNED UNIQUE SILHOUETTE MONSTERS (ZERO PLAIN CIRCLES!) ====================
+    function drawCreature(c) {
+      ctx.save();
+      ctx.translate(c.x, c.y);
+
+      // Sky Sentinel laser lock sightline on flying player!
+      if (c.lockTarget && state.player) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(250, 204, 21, 0.45)';
+        ctx.lineWidth = 2; ctx.setLineDash([8, 6]);
+        ctx.beginPath(); ctx.moveTo(0, -14); ctx.lineTo(state.player.x - c.x, state.player.y - c.y); ctx.stroke();
+        ctx.restore();
+      }
+
+      // Runic Elite Orbiting Aura!
+      if (c.rune) {
+        ctx.save();
+        ctx.strokeStyle = c.rune.color; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.ellipse(0, 4, c.r + 10, c.r * 0.65 + 6, state.elapsed * 2, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+      }
+
+      // Ground shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.32)';
+      ctx.beginPath(); ctx.ellipse(0, c.kind === 'storm_harpy' ? 24 : 12, c.r, c.r * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+
+      const flash = c.hitFlash > 0;
+      const slow = c.slowTimer > 0;
+
+      ctx.save();
+      if (c.kind === 'storm_harpy') ctx.translate(0, -14 + Math.sin(c.anim) * 6);
+
+      if (c.kind === 'wolf') {
+        // 4-legged Shadow Wolf with wagging tail, pointed ears, snout & fangs
+        ctx.rotate(c.facing);
+        const leg = Math.sin(c.anim * 1.6) * 6;
+        ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 3.5; ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(9, -7); ctx.lineTo(12 + leg, -14); ctx.moveTo(9, 7); ctx.lineTo(12 - leg, 14);
+        ctx.moveTo(-10, -7); ctx.lineTo(-13 - leg, -14); ctx.moveTo(-10, 7); ctx.lineTo(-13 + leg, 14);
+        ctx.stroke();
+        // Bushy tail
+        ctx.strokeStyle = '#334155'; ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.moveTo(-15, 0); ctx.quadraticCurveTo(-25, Math.sin(c.anim) * 7, -30, Math.sin(c.anim) * 9); ctx.stroke();
+        // Elongated lupine torso
+        ctx.fillStyle = flash ? '#fff' : (slow ? '#7dd3fc' : '#334155');
+        ctx.beginPath(); ctx.ellipse(0, 0, 17, 10, 0, 0, Math.PI * 2); ctx.fill();
+        // Snout & head
+        ctx.fillStyle = flash ? '#fff' : '#1e293b';
+        ctx.beginPath(); ctx.moveTo(10, -8); ctx.lineTo(25, -3); ctx.lineTo(25, 3); ctx.lineTo(10, 8); ctx.closePath(); ctx.fill();
+        // Ears
+        ctx.beginPath(); ctx.moveTo(9, -8); ctx.lineTo(3, -15); ctx.lineTo(14, -9); ctx.moveTo(9, 8); ctx.lineTo(3, 15); ctx.lineTo(14, 9); ctx.fill();
+        // Glowing eyes
+        ctx.fillStyle = isNight() ? '#ef4444' : '#facc15';
+        ctx.beginPath(); ctx.arc(16, -4, 2.2, 0, Math.PI * 2); ctx.arc(16, 4, 2.2, 0, Math.PI * 2); ctx.fill();
+      } else if (c.kind === 'swamp_ghoul') {
+        // Hunched clawed Swamp Ghoul with sweeping spiked arms
+        ctx.rotate(c.facing);
+        const swipe = Math.sin(c.anim * 1.4) * 5;
+        ctx.strokeStyle = '#14532d'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(4, -12); ctx.lineTo(20 + swipe, -15); ctx.moveTo(4, 12); ctx.lineTo(20 - swipe, 15); ctx.stroke();
+        // Claws
+        ctx.strokeStyle = '#fef08a'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(20 + swipe, -15); ctx.lineTo(26 + swipe, -18); ctx.moveTo(20 - swipe, 15); ctx.lineTo(26 - swipe, 18); ctx.stroke();
+        // Gnarled hunched body
+        ctx.fillStyle = flash ? '#fff' : '#166534';
+        ctx.beginPath(); ctx.moveTo(-16, -10); ctx.lineTo(12, -13); ctx.lineTo(16, 0); ctx.lineTo(12, 13); ctx.lineTo(-16, 10); ctx.lineTo(-20, 0); ctx.closePath(); ctx.fill();
+        // Mossy spine ridges
+        ctx.fillStyle = '#4ade80';
+        for (let sx = -10; sx <= 4; sx += 7) { ctx.beginPath(); ctx.arc(sx, 0, 3, 0, Math.PI * 2); ctx.fill(); }
+        ctx.fillStyle = '#facc15'; ctx.beginPath(); ctx.arc(11, -5, 2.6, 0, Math.PI * 2); ctx.arc(11, 5, 2.6, 0, Math.PI * 2); ctx.fill();
+      } else if (c.kind === 'forest_archer') {
+        // Hooded Ranger with drawn wooden bow & quiver!
+        ctx.rotate(c.facing);
+        // Cloak shoulders
+        ctx.fillStyle = flash ? '#fff' : '#15803d';
+        ctx.beginPath(); ctx.moveTo(-14, -13); ctx.lineTo(6, -10); ctx.lineTo(6, 10); ctx.lineTo(-14, 13); ctx.lineTo(-18, 0); ctx.closePath(); ctx.fill();
+        // Hood
+        ctx.fillStyle = '#14532d'; ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fde047'; ctx.beginPath(); ctx.arc(5, -3, 1.7, 0, Math.PI * 2); ctx.arc(5, 3, 1.7, 0, Math.PI * 2); ctx.fill();
+        // Drawn Wooden Bow + Arrow
+        ctx.strokeStyle = '#b45309'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(12, 0, 14, -Math.PI * 0.48, Math.PI * 0.48); ctx.stroke();
+        ctx.strokeStyle = '#4ade80'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(26, 0); ctx.stroke();
+      } else if (c.kind === 'ash_cultist') {
+        // Robed Crimson Cultist with glowing fire staff
+        ctx.rotate(c.facing);
+        ctx.fillStyle = flash ? '#fff' : '#7f1d1d';
+        ctx.beginPath(); ctx.moveTo(-16, -14); ctx.lineTo(10, -11); ctx.lineTo(14, 0); ctx.lineTo(10, 11); ctx.lineTo(-16, 14); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#fb923c'; ctx.lineWidth = 1.8; ctx.stroke();
+        // Horned Hood
+        ctx.fillStyle = '#450a0a'; ctx.beginPath(); ctx.arc(0, 0, 9.5, 0, Math.PI * 2); ctx.fill();
+        // Fire Staff
+        ctx.strokeStyle = '#78350f'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(2, 11); ctx.lineTo(24, 14); ctx.stroke();
+        ctx.fillStyle = '#f97316'; ctx.beginPath(); ctx.arc(25, 14, 5, 0, Math.PI * 2); ctx.fill();
+      } else if (c.kind === 'lava_golem') {
+        // Angular Obsidian Blocks with molten lava seams & heavy floating fists
+        ctx.rotate(c.facing);
+        ctx.fillStyle = flash ? '#fff' : '#292524';
+        ctx.beginPath(); ctx.moveTo(-18, -18); ctx.lineTo(14, -20); ctx.lineTo(22, -6); ctx.lineTo(22, 6); ctx.lineTo(14, 20); ctx.lineTo(-18, 18); ctx.lineTo(-22, 0); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#f97316'; ctx.lineWidth = 3; ctx.stroke();
+        // Heavy lava fists
+        const punch = Math.sin(c.anim) * 4;
+        ctx.fillStyle = '#44403c';
+        ctx.fillRect(14 + punch, -24, 12, 10); ctx.fillRect(14 - punch, 14, 12, 10);
+        ctx.fillStyle = '#fef08a'; ctx.beginPath(); ctx.arc(11, -7, 3.5, 0, Math.PI * 2); ctx.arc(11, 7, 3.5, 0, Math.PI * 2); ctx.fill();
+      } else if (c.kind === 'ice_wraith') {
+        // Jagged Spectral Cloak + Crystalline Ice Crown
+        ctx.rotate(c.facing);
+        ctx.fillStyle = flash ? '#fff' : 'rgba(14, 165, 233, 0.85)';
+        ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(2, -16); ctx.lineTo(-18, -11); ctx.lineTo(-12, 0); ctx.lineTo(-18, 11); ctx.lineTo(2, 16); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#e0f2fe'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(7, -5, 2.5, 0, Math.PI * 2); ctx.arc(7, 5, 2.5, 0, Math.PI * 2); ctx.fill();
+      } else if (c.kind === 'storm_harpy') {
+        // Winged Anti-Air Storm Harpy with sweeping feathers & talons!
+        ctx.rotate(c.facing);
+        const flap = Math.sin(c.anim * 2.2) * 14;
+        ctx.fillStyle = flash ? '#fff' : '#475569';
+        // Sweeping feathered wings
+        ctx.beginPath();
+        ctx.moveTo(6, -5); ctx.lineTo(-6, -28 - flap); ctx.lineTo(-18, -16 - flap * 0.5); ctx.lineTo(-8, -4);
+        ctx.moveTo(6, 5); ctx.lineTo(-6, 28 + flap); ctx.lineTo(-18, 16 + flap * 0.5); ctx.lineTo(-8, 4);
+        ctx.fill();
+        ctx.strokeStyle = '#bae6fd'; ctx.lineWidth = 2; ctx.stroke();
+        // Sleek bird-of-prey torso & beak
+        ctx.fillStyle = '#1e293b'; ctx.beginPath(); ctx.ellipse(0, 0, 14, 8, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#facc15'; ctx.beginPath(); ctx.moveTo(12, -4); ctx.lineTo(22, 0); ctx.lineTo(12, 4); ctx.closePath(); ctx.fill();
+      } else if (c.kind === 'sky_sentinel') {
+        // Levitating Anti-Air Rune Monolith with rotating crystal eye!
+        ctx.strokeStyle = '#facc15'; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.ellipse(0, -10, 26, 12, state.elapsed * 2.2, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = flash ? '#fff' : '#334155';
+        ctx.beginPath(); ctx.moveTo(0, -34); ctx.lineTo(15, -10); ctx.lineTo(0, 14); ctx.lineTo(-15, -10); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2; ctx.stroke();
+        // Glowing Sky Eye
+        ctx.fillStyle = '#facc15'; ctx.beginPath(); ctx.arc(0, -10, 7, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#7f1d1d'; ctx.beginPath(); ctx.ellipse(0, -10, 2.5, 6, 0, 0, Math.PI * 2); ctx.fill();
+      } else {
+        // Crystal Beetle (6 articulated legs, segmented carapace, crystal back spikes)
+        ctx.rotate(c.facing);
+        const leg = Math.sin(c.anim * 2) * 4;
+        ctx.strokeStyle = '#c084fc'; ctx.lineWidth = 2.2;
+        [-8, 0, 8].forEach(lx => {
+          ctx.beginPath(); ctx.moveTo(lx, -10); ctx.lineTo(lx + leg, -19); ctx.moveTo(lx, 10); ctx.lineTo(lx - leg, 19); ctx.stroke();
+        });
+        ctx.fillStyle = flash ? '#fff' : '#581c87';
+        ctx.beginPath(); ctx.moveTo(-16, -9); ctx.lineTo(12, -11); ctx.lineTo(19, 0); ctx.lineTo(12, 11); ctx.lineTo(-16, 9); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#e879f9';
+        ctx.beginPath(); ctx.moveTo(-6, 0); ctx.lineTo(2, -7); ctx.lineTo(8, 0); ctx.lineTo(2, 7); ctx.closePath(); ctx.fill();
+      }
+
+      ctx.restore();
+
+      // Level & Rune Badge + HP bar above creature
+      const topY = -c.r - (c.kind === 'storm_harpy' ? 24 : 14);
+      if (c.level > 1 || c.rune || c.role === 'antiair') {
+        ctx.font = 'bold 10px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = c.rune ? c.rune.color : '#e2e8f0';
+        const tag = `Sv.${c.level}${c.rune ? ' ' + c.rune.icon : ''}${c.role === 'antiair' ? ' 🪽' : ''}`;
+        ctx.fillText(tag, 0, topY - 5);
+      }
+      if (c.hp < c.maxHp) {
+        ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.fillRect(-17, topY, 34, 5);
+        ctx.fillStyle = '#ef4444'; ctx.fillRect(-16, topY + 1, 32 * (c.hp / c.maxHp), 3);
+      }
+      ctx.restore();
+    }
+
+    function drawCombatEffects() {
+      for (const proj of state.projectiles) {
+        ctx.save();
+        const col = proj.color || (proj.element === 'fire' || proj.element === 'dragon_fire' ? '#f97316' : proj.element === 'ice' ? '#38bdf8' : '#2dd4bf');
+        ctx.shadowColor = col; ctx.shadowBlur = 12;
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(proj.x, proj.y, proj.r, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.stroke(); ctx.restore();
+      }
+      for (const w of state.waves) {
+        ctx.save(); ctx.globalAlpha = Math.max(0, 1 - w.r / w.maxR);
+        ctx.strokeStyle = w.color; ctx.lineWidth = w.width;
+        ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+      }
+      for (const pt of state.particles) {
+        ctx.save(); ctx.globalAlpha = Math.max(0, pt.life / pt.maxLife);
+        ctx.fillStyle = pt.color; ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      }
+      for (const ft of state.floatingTexts) {
+        ctx.save(); ctx.globalAlpha = Math.max(0, ft.life / ft.maxLife);
+        ctx.font = 'bold 14px Inter, sans-serif'; ctx.textAlign = 'center';
+        ctx.fillStyle = '#000'; ctx.fillText(ft.text, ft.x + 1, ft.y + 1);
+        ctx.fillStyle = ft.color; ctx.fillText(ft.text, ft.x, ft.y); ctx.restore();
+      }
+    }
+
+    function drawBiomeGrounds() {
+      const campG = ctx.createRadialGradient(state.campPos.x, state.campPos.y, 40, state.campPos.x, state.campPos.y, 210);
+      campG.addColorStop(0, '#5a633d'); campG.addColorStop(1, 'rgba(37,72,48,0)');
+      ctx.fillStyle = campG; ctx.beginPath(); ctx.arc(state.campPos.x, state.campPos.y, 210, 0, Math.PI * 2); ctx.fill();
+
+      const v = state.volcanoPos;
+      const volG = ctx.createRadialGradient(v.x, v.y, 140, v.x, v.y, v.radius + 220);
+      volG.addColorStop(0, '#292524'); volG.addColorStop(0.65, '#3f3632'); volG.addColorStop(1, 'rgba(37,72,48,0)');
+      ctx.fillStyle = volG; ctx.beginPath(); ctx.arc(v.x, v.y, v.radius + 220, 0, Math.PI * 2); ctx.fill();
+
+      const sn = state.snowPos;
+      const snG = ctx.createRadialGradient(sn.x, sn.y, 180, sn.x, sn.y, sn.radius + 140);
+      snG.addColorStop(0, '#e0f2fe'); snG.addColorStop(0.7, '#bae6fd'); snG.addColorStop(1, 'rgba(37,72,48,0)');
+      ctx.fillStyle = snG; ctx.beginPath(); ctx.arc(sn.x, sn.y, sn.radius + 140, 0, Math.PI * 2); ctx.fill();
+
+      const gb = state.geyserBasin;
+      const geyG = ctx.createRadialGradient(gb.x, gb.y, 30, gb.x, gb.y, gb.radius + 80);
+      geyG.addColorStop(0, '#6b705c'); geyG.addColorStop(1, 'rgba(37,72,48,0)');
+      ctx.fillStyle = geyG; ctx.beginPath(); ctx.arc(gb.x, gb.y, gb.radius + 80, 0, Math.PI * 2); ctx.fill();
+    }
+
+    function drawVillage(v) {
+      ctx.save();
+      ctx.fillStyle = '#78716c'; ctx.beginPath(); ctx.arc(v.x, v.y, v.radius * 0.72, 0, Math.PI * 2); ctx.fill();
+      for (const h of v.houses) {
+        ctx.fillStyle = '#d6c7a9'; ctx.fillRect(h.x - h.w / 2, h.y - h.h / 2, h.w, h.h);
+        ctx.fillStyle = h.roof;
+        ctx.beginPath(); ctx.moveTo(h.x - h.w / 2 - 6, h.y - h.h / 2 + 6); ctx.lineTo(h.x, h.y - h.h / 2 - 22); ctx.lineTo(h.x + h.w / 2 + 6, h.y - h.h / 2 + 6); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#fde047'; ctx.fillRect(h.x - 18, h.y - 4, 12, 12); ctx.fillRect(h.x + 6, h.y - 4, 12, 12);
+      }
+      ctx.fillStyle = '#94a3b8'; ctx.beginPath(); ctx.arc(v.fountain.x, v.fountain.y, 26, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#38bdf8'; ctx.beginPath(); ctx.arc(v.fountain.x, v.fountain.y, 19, 0, Math.PI * 2); ctx.fill();
+      ctx.font = 'bold 14px Inter, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fef3c7';
+      ctx.fillText(`🏡 ${v.name.toUpperCase()}`, v.x, v.y - v.radius * 0.76);
+      ctx.restore();
+    }
+
+    function drawNpc(npc) {
+      ctx.save(); ctx.translate(npc.x, npc.y);
+      ctx.fillStyle = npc.color; ctx.beginPath(); ctx.arc(0, 0, 14, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#fef08a'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.font = '15px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(npc.icon, 0, 0);
+      ctx.font = 'bold 11px Inter, sans-serif'; ctx.fillStyle = '#fef3c7'; ctx.fillText(npc.name, 0, -22);
+      ctx.restore();
+    }
+
+    function drawWildlife(w) {
+      ctx.save(); ctx.translate(w.x, w.y - Math.abs(Math.sin(w.hop)) * 4); ctx.rotate(w.angle);
+      if (w.kind === 'deer') {
+        ctx.fillStyle = '#92400e'; ctx.beginPath(); ctx.ellipse(0, 0, 14, 8, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#b45309'; ctx.beginPath(); ctx.arc(13, 0, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#fde68a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(14, -4); ctx.lineTo(20, -10); ctx.moveTo(14, 4); ctx.lineTo(20, 10); ctx.stroke();
+      } else {
+        ctx.fillStyle = '#e7e5e4'; ctx.beginPath(); ctx.ellipse(0, 0, 8, 5.5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fda4af'; ctx.beginPath(); ctx.ellipse(-2, -5, 4, 2, -0.4, 0, Math.PI * 2); ctx.ellipse(-2, 5, 4, 2, 0.4, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawWorldRune(wr) {
+      ctx.save(); ctx.translate(wr.x, wr.y + Math.sin(state.elapsed * 4) * 5);
+      ctx.shadowColor = wr.color; ctx.shadowBlur = 18; ctx.fillStyle = wr.color;
+      ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(14, 0); ctx.lineTo(0, 18); ctx.lineTo(-14, 0); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.font = 'bold 11px Inter, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText(wr.name, 0, -26);
+      ctx.restore();
+    }
+
+    function drawSnowShrine() {
+      const s = state.snowPos;
+      ctx.save();
+      ctx.fillStyle = '#0c4a6e'; ctx.beginPath(); ctx.arc(s.x, s.y, 105, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#7dd3fc'; ctx.lineWidth = 4; ctx.setLineDash([14, 8]);
+      ctx.beginPath(); ctx.arc(s.x, s.y, 88, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+      ctx.font = '26px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('❄️', s.x, s.y);
+      ctx.font = 'bold 12px Inter, sans-serif'; ctx.fillStyle = '#e0f2fe'; ctx.fillText('BUZUL MUHAFIZ SUNAĞI', s.x, s.y - 118);
+      ctx.restore();
+    }
+
+    function drawLakes() {
+      for (const l of state.lakes) {
+        ctx.save();
+        if (l.isSwamp) {
+          ctx.fillStyle = '#193529'; ctx.beginPath(); ctx.ellipse(l.x, l.y, l.rx, l.ry, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = '#2d5440'; ctx.lineWidth = 14; ctx.stroke();
+          for (let i = 0; i < 12; i++) {
+            const ang = (i / 12) * Math.PI * 2 + 0.2;
+            ctx.fillStyle = '#2e854d'; ctx.beginPath(); ctx.arc(l.x + Math.cos(ang) * l.rx * 0.72, l.y + Math.sin(ang) * l.ry * 0.72, 17, 0.25, Math.PI * 1.88); ctx.fill();
+          }
+        } else {
+          ctx.fillStyle = '#b4a176'; ctx.beginPath(); ctx.ellipse(l.x, l.y, l.rx + 14, l.ry + 14, 0, 0, Math.PI * 2); ctx.fill();
+          const grad = ctx.createRadialGradient(l.x - 24, l.y - 20, 12, l.x, l.y, l.rx);
+          grad.addColorStop(0, '#38bdf8'); grad.addColorStop(1, '#075985');
+          ctx.fillStyle = grad; ctx.beginPath(); ctx.ellipse(l.x, l.y, l.rx, l.ry, 0, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+      }
+    }
+
+    function drawVolcano() {
+      const v = state.volcanoPos;
+      ctx.save(); ctx.translate(v.x, v.y);
+      ctx.fillStyle = '#1c1917'; ctx.beginPath(); ctx.arc(0, 0, 270, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#292524'; ctx.beginPath(); ctx.arc(-8, -8, 215, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#3f3834'; ctx.beginPath(); ctx.arc(-10, -10, 160, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#f97316'; ctx.lineWidth = 10; ctx.lineCap = 'round';
+      for (let i = 0; i < 4; i++) {
+        const a = i * Math.PI * 0.5 + 0.55;
+        ctx.beginPath(); ctx.moveTo(Math.cos(a) * 85, Math.sin(a) * 85); ctx.quadraticCurveTo(Math.cos(a + 0.22) * 165, Math.sin(a + 0.22) * 165, Math.cos(a - 0.1) * 240, Math.sin(a - 0.1) * 240); ctx.stroke();
+      }
+      const lavaG = ctx.createRadialGradient(0, 0, 12, 0, 0, 90);
+      lavaG.addColorStop(0, '#fef08a'); lavaG.addColorStop(0.5, '#f97316'); lavaG.addColorStop(1, '#7f1d1d');
+      ctx.fillStyle = lavaG; ctx.beginPath(); ctx.arc(0, 0, 88, 0, Math.PI * 2); ctx.fill();
+      ctx.font = 'bold 14px Inter, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fed7aa'; ctx.fillText('🌋 KIZIL VOLKAN', 0, -284);
+      ctx.restore();
+    }
+
+    function drawGeyser(g) {
+      ctx.save(); ctx.translate(g.x, g.y);
+      ctx.fillStyle = '#d6c7a9'; ctx.beginPath(); ctx.ellipse(0, 0, g.r + 12, (g.r + 12) * 0.78, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#d97706'; ctx.beginPath(); ctx.ellipse(0, 0, g.r + 5, (g.r + 5) * 0.78, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#06b6d4'; ctx.beginPath(); ctx.ellipse(0, 0, g.r, g.r * 0.76, 0, 0, Math.PI * 2); ctx.fill();
+      if (g.erupting > 0) {
+        const colH = 85 * Math.min(1, g.erupting * 1.4);
+        const grad = ctx.createLinearGradient(0, 0, 0, -colH);
+        grad.addColorStop(0, 'rgba(186,230,253,0.92)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = grad; ctx.beginPath(); ctx.moveTo(-12, 0); ctx.lineTo(-26, -colH); ctx.lineTo(26, -colH); ctx.lineTo(12, 0); ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawCaveEntrance(c) {
+      ctx.save(); ctx.translate(c.x, c.y);
+      ctx.fillStyle = '#475569'; ctx.beginPath(); ctx.arc(0, -6, c.r, Math.PI, 0); ctx.lineTo(c.r + 8, 22); ctx.lineTo(-c.r - 8, 22); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#090d14'; ctx.beginPath(); ctx.arc(0, 12, c.r * 0.52, Math.PI, 0); ctx.lineTo(c.r * 0.52, 24); ctx.lineTo(-c.r * 0.52, 24); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = c.crystalColor; ctx.shadowColor = c.crystalColor; ctx.shadowBlur = 14;
+      [[-12, 16, 12], [0, 10, 16], [12, 17, 11]].forEach(([cx, cy, ch]) => { ctx.beginPath(); ctx.moveTo(cx - 4, cy + 6); ctx.lineTo(cx, cy - ch); ctx.lineTo(cx + 4, cy + 6); ctx.closePath(); ctx.fill(); });
+      ctx.shadowBlur = 0; ctx.font = 'bold 11px Inter, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#e2e8f0';
+      ctx.fillText(`💎 ${c.name.toUpperCase()}`, 0, -c.r - 12);
+      ctx.restore();
+    }
+
+    function drawRuins() {
+      const r = state.ruinsPos;
+      ctx.save();
+      ctx.fillStyle = '#475569'; ctx.beginPath(); ctx.arc(r.x, r.y, 108, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 4; ctx.stroke();
+      for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; ctx.fillStyle = '#cbd5e1'; ctx.beginPath(); ctx.arc(r.x + Math.cos(a) * 88, r.y + Math.sin(a) * 88, 12, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = '#b45309'; ctx.beginPath(); ctx.arc(r.x, r.y, 26, 0, Math.PI * 2); ctx.fill();
+      if (!state.hornRelic.collected) {
+        ctx.save(); ctx.translate(r.x, r.y - 4 + Math.sin(state.elapsed * 3) * 3);
+        ctx.strokeStyle = '#facc15'; ctx.lineWidth = 6; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.arc(2, 2, 12, Math.PI * 0.7, Math.PI * 1.9); ctx.stroke(); ctx.restore();
+      }
+      ctx.font = 'bold 12px Inter, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fef08a'; ctx.fillText('ANTİK HARABE', r.x, r.y - 122);
+      ctx.restore();
+    }
+
+    function drawAltar() {
+      const a = state.altarPos;
+      ctx.save();
+      ctx.fillStyle = '#24323a'; ctx.beginPath(); ctx.arc(a.x, a.y, 120, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(192,132,252,0.75)'; ctx.lineWidth = 4; ctx.setLineDash([16, 10]);
+      ctx.beginPath(); ctx.arc(a.x, a.y, 98, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+      ctx.font = '26px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🐸', a.x, a.y);
+      ctx.font = 'bold 12px Inter, sans-serif'; ctx.fillStyle = '#e9d5ff'; ctx.fillText('KADİM BATAKLIK SUNAĞI', a.x, a.y - 134);
+      ctx.restore();
+    }
+
+    function drawTent(t) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(251,191,36,0.22)'; ctx.lineWidth = 2; ctx.setLineDash([8, 8]);
+      ctx.beginPath(); ctx.arc(t.x, t.y, t.radius, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = '#9a3412'; ctx.beginPath(); ctx.moveTo(t.x, t.y - 40); ctx.lineTo(t.x + 42, t.y + 18); ctx.lineTo(t.x - 42, t.y + 18); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#d97706'; ctx.beginPath(); ctx.moveTo(t.x, t.y - 40); ctx.lineTo(t.x + 42, t.y + 18); ctx.lineTo(t.x + 4, t.y + 18); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#1c1917'; ctx.beginPath(); ctx.moveTo(t.x, t.y - 9); ctx.lineTo(t.x + 13, t.y + 18); ctx.lineTo(t.x - 13, t.y + 18); ctx.closePath(); ctx.fill();
+      const fx = t.x + 30, fy = t.y + 26, flicker = 1 + Math.sin(state.elapsed * 14 + t.x) * 0.14;
+      ctx.fillStyle = 'rgba(251,191,36,0.35)'; ctx.beginPath(); ctx.arc(fx, fy, 20 * flicker, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#f97316'; ctx.beginPath(); ctx.arc(fx, fy, 8 * flicker, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fef08a'; ctx.beginPath(); ctx.arc(fx, fy, 4 * flicker, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    function drawResource(r) {
+      ctx.save(); ctx.translate(r.x, r.y);
+      if (r.hitFlash > 0) ctx.scale(1.07, 0.94);
+      if (r.type === 'tree') {
+        ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.beginPath(); ctx.ellipse(5, 16, r.r, r.r * 0.56, 0, 0, Math.PI * 2); ctx.fill();
+        if (r.variant === 'pine' || r.variant === 'snow_pine') {
+          ctx.fillStyle = '#4a2e16'; ctx.fillRect(-5, 2, 10, 16);
+          const cols = r.variant === 'snow_pine' ? ['#0e7490', '#38bdf8', '#f0f9ff'] : ['#0f4c3a', '#14634c', '#1f8a68'];
+          [{ y: 2, rad: r.r * 1.05, col: cols[0] }, { y: -8, rad: r.r * 0.82, col: cols[1] }, { y: -18, rad: r.r * 0.55, col: cols[2] }].forEach(ly => {
+            ctx.fillStyle = ly.col; ctx.beginPath();
+            for (let i = 0; i < 14; i++) { const a = (i / 14) * Math.PI * 2, rr = i % 2 === 0 ? ly.rad : ly.rad * 0.68; if (i === 0) ctx.moveTo(Math.cos(a) * rr, ly.y + Math.sin(a) * rr); else ctx.lineTo(Math.cos(a) * rr, ly.y + Math.sin(a) * rr); }
+            ctx.closePath(); ctx.fill();
+          });
+        } else if (r.variant === 'birch') {
+          ctx.fillStyle = '#e7e5e4'; ctx.fillRect(-5, 0, 10, 17);
+          ctx.fillStyle = '#c2410c'; ctx.beginPath(); ctx.arc(0, -8, r.r * 0.96, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#facc15'; ctx.beginPath(); ctx.arc(-6, -15, r.r * 0.6, 0, Math.PI * 2); ctx.fill();
+        } else if (r.variant === 'willow') {
+          ctx.fillStyle = '#583b4a'; ctx.fillRect(-6, -1, 12, 18);
+          ctx.fillStyle = '#7e22ce'; ctx.beginPath(); ctx.arc(0, -8, r.r * 1.05, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#c084fc'; ctx.beginPath(); ctx.arc(-7, -14, r.r * 0.7, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#f9a8d4'; ctx.beginPath(); ctx.arc(-2, -18, r.r * 0.42, 0, Math.PI * 2); ctx.fill();
+        } else {
+          ctx.fillStyle = '#6b4423'; ctx.fillRect(-6, -1, 12, 18);
+          ctx.fillStyle = '#14532d'; ctx.beginPath(); ctx.arc(0, -7, r.r, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#16a34a'; ctx.beginPath(); ctx.arc(-8, -12, r.r * 0.72, 0, Math.PI * 2); ctx.arc(9, -9, r.r * 0.62, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = '#4ade80'; ctx.beginPath(); ctx.arc(-4, -17, r.r * 0.42, 0, Math.PI * 2); ctx.fill();
+        }
+      } else if (r.type === 'rock') {
+        ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.beginPath(); ctx.ellipse(3, 10, r.r, r.r * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#526072';
+        ctx.beginPath(); ctx.moveTo(-r.r, 6); ctx.lineTo(-r.r * 0.6, -r.r * 0.84); ctx.lineTo(r.r * 0.5, -r.r * 0.9); ctx.lineTo(r.r, 2); ctx.lineTo(r.r * 0.4, r.r * 0.7); ctx.lineTo(-r.r * 0.7, r.r * 0.65); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#cbd5e1'; ctx.beginPath(); ctx.arc(-5, -5, 3.6, 0, Math.PI * 2); ctx.arc(6, -2, 2.8, 0, Math.PI * 2); ctx.fill();
+      } else if (r.type === 'bush') {
+        ctx.fillStyle = '#15803d'; ctx.beginPath(); ctx.arc(0, 0, r.r, 0, Math.PI * 2); ctx.arc(-9, 3, r.r * 0.7, 0, Math.PI * 2); ctx.arc(9, 2, r.r * 0.7, 0, Math.PI * 2); ctx.fill();
+        if (r.hasFruit) { ctx.fillStyle = '#e879f9'; [[-6, -4], [5, -5], [0, 4], [8, 3]].forEach(([bx, by]) => { ctx.beginPath(); ctx.arc(bx, by, 3.2, 0, Math.PI * 2); ctx.fill(); }); }
+      }
+      ctx.restore();
+    }
+
+    function drawDragon(x, y, angle, altitude, wingPhase) {
+      ctx.save(); ctx.translate(x, y);
+      const shadowOffset = altitude * 95, shadowScale = Math.max(0.55, 1 - altitude * 0.35);
+      ctx.save(); ctx.translate(shadowOffset * 0.45, 18 + shadowOffset); ctx.scale(shadowScale, shadowScale); ctx.rotate(angle);
+      ctx.fillStyle = `rgba(0,0,0,${0.36 - altitude * 0.14})`;
+      ctx.beginPath(); ctx.ellipse(0, 0, 46, 22, 0, 0, Math.PI * 2); ctx.ellipse(-6, 0, 22, 64, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+
+      const bodyScale = 1 + altitude * 0.22;
+      ctx.translate(0, -altitude * 28); ctx.scale(bodyScale, bodyScale); ctx.rotate(angle);
+      const flap = Math.sin(wingPhase), wingSpan = 56 + flap * (altitude > 0.1 ? 22 : 6), wingSweep = -12 + flap * 10;
+
+      [-1, 1].forEach(dir => {
+        ctx.fillStyle = '#991b1b';
+        ctx.beginPath(); ctx.moveTo(8, dir * 10); ctx.quadraticCurveTo(22, dir * wingSpan * 0.65, wingSweep, dir * wingSpan);
+        ctx.quadraticCurveTo(-18, dir * wingSpan * 0.72, -24, dir * wingSpan * 0.48); ctx.quadraticCurveTo(-14, dir * 24, -18, dir * 10); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 2.4; ctx.stroke();
+      });
+
+      const tailWag = Math.sin(state.elapsed * 4.5) * 9;
+      ctx.strokeStyle = '#7f1d1d'; ctx.lineWidth = 9; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(-24, 0); ctx.quadraticCurveTo(-48, tailWag, -68, tailWag * 1.3); ctx.stroke();
+      ctx.fillStyle = '#dc2626'; ctx.beginPath(); ctx.ellipse(0, 0, 32, 16, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#b91c1c'; ctx.beginPath(); ctx.ellipse(32, 0, 15, 9.5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#fde047'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(26, -6); ctx.lineTo(14, -15); ctx.moveTo(26, 6); ctx.lineTo(14, 15); ctx.stroke();
+      ctx.fillStyle = '#fef08a'; ctx.beginPath(); ctx.arc(38, -4.5, 2.5, 0, Math.PI * 2); ctx.arc(38, 4.5, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    function drawPlayer() {
+      const p = state.player;
+      const mountedDragon = state.scene === 'overworld' && state.dragon.mounted;
+      if (mountedDragon) drawDragon(p.x, p.y, state.dragon.angle, state.dragon.altitude, state.dragon.wingPhase);
+
+      ctx.save();
+      const liftY = mountedDragon ? -state.dragon.altitude * 28 - 4 : 0;
+      const riderScale = mountedDragon ? 1 + state.dragon.altitude * 0.16 : 1;
+      ctx.translate(p.x, p.y + liftY); ctx.scale(riderScale, riderScale);
+
+      if (p.shieldTimer > 0) {
+        ctx.save(); ctx.strokeStyle = '#5eead4'; ctx.fillStyle = 'rgba(94,234,212,0.22)'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(0, 0, 28, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.restore();
+      }
+      if (!mountedDragon) { ctx.fillStyle = 'rgba(0,0,0,0.32)'; ctx.beginPath(); ctx.ellipse(0, 13, 14, 8, 0, 0, Math.PI * 2); ctx.fill(); }
+
+      ctx.rotate(p.aimAngle);
+      ctx.fillStyle = p.hurtFlash > 0 ? '#ef4444' : '#1d4ed8';
+      ctx.beginPath(); ctx.ellipse(-2, 0, 11.5, 14.5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#93c5fd'; ctx.lineWidth = 1.6; ctx.stroke();
+
+      const gCol = p.gauntletMode === 'draw' ? '#d97706' : p.gauntletMode === 'telekinesis' ? '#9333ea' : p.element === 'fire' ? '#ea580c' : p.element === 'ice' ? '#0284c7' : '#14b8a6';
+      const gGlow = p.gauntletMode === 'draw' ? '#fde047' : p.gauntletMode === 'telekinesis' ? '#c084fc' : p.element === 'fire' ? '#fb923c' : p.element === 'ice' ? '#38bdf8' : '#2dd4bf';
+      const recoil = p.shootCd > 0.14 ? -3 : 0;
+      [-10.5, 10.5].forEach(gy => {
+        ctx.save(); ctx.translate(12.5 + recoil, gy); ctx.shadowColor = gGlow; ctx.shadowBlur = 14;
+        ctx.fillStyle = gCol; ctx.beginPath(); ctx.arc(0, 0, 5.6, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#fde047'; ctx.lineWidth = 1.6; ctx.stroke(); ctx.restore();
+      });
+
+      ctx.fillStyle = '#fcd34d'; ctx.beginPath(); ctx.arc(1, 0, 9.5, 0, Math.PI * 2); ctx.fill();
+      if (p.helmetEquipped) {
+        const hg = ctx.createRadialGradient(-1, -3, 2, 1, 0, 12);
+        hg.addColorStop(0, '#f8fafc'); hg.addColorStop(0.6, '#94a3b8'); hg.addColorStop(1, '#334155');
+        ctx.fillStyle = hg; ctx.beginPath(); ctx.arc(1, 0, 11.4, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#eab963'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.fillStyle = '#0f172a'; ctx.fillRect(6, -6, 4.5, 12);
+        ctx.fillStyle = gGlow; ctx.fillRect(7.5, -4, 2, 3); ctx.fillRect(7.5, 1, 2, 3);
+        ctx.fillStyle = '#dc2626'; ctx.beginPath(); ctx.ellipse(-6, 0, 8.5, 3.6, 0, 0, Math.PI * 2); ctx.fill();
+      } else {
+        ctx.fillStyle = '#451a03'; ctx.beginPath(); ctx.arc(-1, 0, 9.5, Math.PI * 0.55, Math.PI * 1.45); ctx.fill();
+        ctx.fillStyle = '#0f172a'; ctx.beginPath(); ctx.arc(6.5, -3.2, 1.4, 0, Math.PI * 2); ctx.arc(6.5, 3.2, 1.4, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawBoss(b) {
+      if (b.kind === 'frog') {
+        if (b.state === 'leap_charge' || b.state === 'leaping') {
+          ctx.save(); ctx.strokeStyle = 'rgba(239,68,68,0.8)'; ctx.fillStyle = 'rgba(239,68,68,0.18)'; ctx.lineWidth = 3; ctx.setLineDash([10, 6]);
+          ctx.beginPath(); ctx.arc(b.leapTargetX, b.leapTargetY, 128, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.restore();
+        }
+        if (b.state === 'tongue_charge') {
+          ctx.save(); ctx.strokeStyle = 'rgba(244,114,182,0.65)'; ctx.lineWidth = 10; ctx.setLineDash([12, 10]);
+          ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x + Math.cos(b.tongueAngle) * b.tongueMaxLen, b.y + Math.sin(b.tongueAngle) * b.tongueMaxLen); ctx.stroke(); ctx.restore();
+        }
+        if (b.state === 'tongue_strike' && b.tongueLen > 5) {
+          const tx = b.x + Math.cos(b.tongueAngle) * b.tongueLen, ty = b.y + Math.sin(b.tongueAngle) * b.tongueLen;
+          ctx.save(); ctx.strokeStyle = '#ec4899'; ctx.lineWidth = 14; ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(tx, ty); ctx.stroke();
+          ctx.fillStyle = '#db2777'; ctx.beginPath(); ctx.arc(tx, ty, 12, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+        }
+      }
+
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.42)'; ctx.beginPath(); ctx.ellipse(b.x, b.y + 22, 66, 44, 0, 0, Math.PI * 2); ctx.fill();
+      const airScale = 1 + b.leapZ / 160;
+      ctx.translate(b.x, b.y - b.leapZ); ctx.scale(airScale, airScale); ctx.rotate(b.facing);
+
+      if (b.kind === 'frog') {
+        ctx.fillStyle = '#14532d'; ctx.beginPath(); ctx.ellipse(-24, -44, 30, 18, -0.45, 0, Math.PI * 2); ctx.ellipse(-24, 44, 30, 18, 0.45, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = b.hitFlash > 0 ? '#fff' : '#15803d'; ctx.beginPath(); ctx.ellipse(0, 0, 56, 48, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#facc15'; ctx.beginPath(); ctx.arc(35, -22, 10, 0, Math.PI * 2); ctx.arc(35, 22, 10, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#09090b'; ctx.beginPath(); ctx.ellipse(37, -22, 3, 7, 0, 0, Math.PI * 2); ctx.ellipse(37, 22, 3, 7, 0, 0, Math.PI * 2); ctx.fill();
+      } else if (b.kind === 'magma') {
+        ctx.fillStyle = b.hitFlash > 0 ? '#fff' : '#292524';
+        ctx.beginPath(); ctx.moveTo(-48, -46); ctx.lineTo(36, -54); ctx.lineTo(58, -16); ctx.lineTo(58, 16); ctx.lineTo(36, 54); ctx.lineTo(-48, 46); ctx.lineTo(-60, 0); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#f97316'; ctx.lineWidth = 6; ctx.stroke();
+        ctx.fillStyle = '#fef08a'; ctx.beginPath(); ctx.arc(24, -18, 9, 0, Math.PI * 2); ctx.arc(24, 18, 9, 0, Math.PI * 2); ctx.fill();
+      } else {
+        ctx.fillStyle = b.hitFlash > 0 ? '#fff' : '#0284c7';
+        ctx.beginPath();
+        for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2, rr = i % 2 === 0 ? b.r + 14 : b.r - 10; if (i === 0) ctx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr); else ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); }
+        ctx.closePath(); ctx.fill(); ctx.strokeStyle = '#e0f2fe'; ctx.lineWidth = 4; ctx.stroke();
+        ctx.fillStyle = '#f0f9ff'; ctx.beginPath(); ctx.arc(20, -16, 8, 0, Math.PI * 2); ctx.arc(20, 16, 8, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawWeather() {
+      const p = state.player;
+      const inSnow = Math.hypot(p.x - state.snowPos.x, p.y - state.snowPos.y) < state.snowPos.radius + 150;
+      const inVolcano = Math.hypot(p.x - state.volcanoPos.x, p.y - state.volcanoPos.y) < 620;
+      const inSwamp = Math.hypot(p.x - state.altarPos.x, p.y - state.altarPos.y) < 580;
+      if (!inSnow && !inVolcano && !inSwamp) return;
+      ctx.save();
+      for (const wd of state.weatherDrops) {
+        if (inSnow) { ctx.fillStyle = 'rgba(240,249,255,0.72)'; ctx.beginPath(); ctx.arc(wd.x, wd.y, wd.sz, 0, Math.PI * 2); ctx.fill(); }
+        else if (inVolcano) { ctx.fillStyle = 'rgba(251,146,60,0.65)'; ctx.beginPath(); ctx.arc(wd.x, viewH - wd.y, wd.sz * 0.9, 0, Math.PI * 2); ctx.fill(); }
+        else { ctx.strokeStyle = 'rgba(148,197,255,0.35)'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(wd.x, wd.y); ctx.lineTo(wd.x - 4, wd.y + 12); ctx.stroke(); }
+      }
+      ctx.restore();
+    }
+
+    function drawLightingOverlay() {
+      const nightAmt = getNightFactor();
+      if (nightAmt <= 0.02) return;
+      const lw = lightCanvas.width, lh = lightCanvas.height, sx = lw / viewW, sy = lh / viewH, z = state.cameraZoom, p = state.player;
+      lightCtx.save(); lightCtx.globalCompositeOperation = 'source-over'; lightCtx.clearRect(0, 0, lw, lh);
+      lightCtx.fillStyle = `rgba(6, 11, 22, ${nightAmt * 0.82})`; lightCtx.fillRect(0, 0, lw, lh);
+      lightCtx.globalCompositeOperation = 'destination-out';
+      function addLight(wx, wy, radius) {
+        const px = (viewW / 2 + (wx - p.x) * z) * sx, py = (viewH / 2 + (wy - p.y) * z) * sy, r = radius * z * sx;
+        if (px + r < 0 || px - r > lw || py + r < 0 || py - r > lh) return;
+        const grad = lightCtx.createRadialGradient(px, py, r * 0.1, px, py, r);
+        grad.addColorStop(0, 'rgba(0,0,0,1)'); grad.addColorStop(1, 'rgba(0,0,0,0)');
+        lightCtx.fillStyle = grad; lightCtx.beginPath(); lightCtx.arc(px, py, r, 0, Math.PI * 2); lightCtx.fill();
+      }
+      addLight(p.x, p.y, state.scene === 'cave' ? 220 : 155);
+      if (state.scene === 'cave') {
+        for (const cr of state.caveCrystals) addLight(cr.x, cr.y, 130);
+        addLight(CAVE_W / 2, CAVE_H - 55, 130);
+      } else {
+        for (const t of state.tents) addLight(t.x + 15, t.y + 15, t.radius + 60);
+        for (const v of state.villages) addLight(v.x, v.y, v.radius + 70);
+        addLight(state.volcanoPos.x, state.volcanoPos.y, 380);
+        addLight(state.shard.x, state.shard.y, 100);
+        for (const c of state.caves) addLight(c.x, c.y, 110);
+        if (!state.hornRelic.collected) addLight(state.ruinsPos.x, state.ruinsPos.y, 130);
+        addLight(state.altarPos.x, state.altarPos.y, 175);
+      }
+      for (const proj of state.projectiles) addLight(proj.x, proj.y, 55);
+      for (const rl of state.activeRuneLines) for (let i = 0; i < rl.points.length; i += 3) addLight(rl.points[i].x, rl.points[i].y, 90);
+      lightCtx.restore();
+      ctx.drawImage(lightCanvas, 0, 0, viewW, viewH);
+    }
+
+    function drawMinimap() {
+      const w = miniCanvas.width, h = miniCanvas.height;
+      if (state.scene === 'cave') {
+        miniCtx.fillStyle = '#0f172a'; miniCtx.fillRect(0, 0, w, h);
+        const sx = w / CAVE_W, sy = h / CAVE_H;
+        for (const cr of state.caveCrystals) { miniCtx.fillStyle = cr.color; miniCtx.beginPath(); miniCtx.arc(cr.x * sx, cr.y * sy, 3.5, 0, Math.PI * 2); miniCtx.fill(); }
+        miniCtx.fillStyle = '#5eead4'; miniCtx.beginPath(); miniCtx.arc(state.player.x * sx, state.player.y * sy, 4, 0, Math.PI * 2); miniCtx.fill();
+        return;
+      }
+      const scale = w / WORLD_SIZE;
+      miniCtx.fillStyle = '#142a1e'; miniCtx.fillRect(0, 0, w, h);
+      miniCtx.fillStyle = '#bae6fd'; miniCtx.beginPath(); miniCtx.arc(state.snowPos.x * scale, state.snowPos.y * scale, state.snowPos.radius * scale, 0, Math.PI * 2); miniCtx.fill();
+      for (const l of state.lakes) { miniCtx.fillStyle = l.isSwamp ? '#2d4f3c' : '#0284c7'; miniCtx.beginPath(); miniCtx.ellipse(l.x * scale, l.y * scale, l.rx * scale, l.ry * scale, 0, 0, Math.PI * 2); miniCtx.fill(); }
+      miniCtx.fillStyle = '#ef4444'; miniCtx.beginPath(); miniCtx.arc(state.volcanoPos.x * scale, state.volcanoPos.y * scale, 6.5, 0, Math.PI * 2); miniCtx.fill();
+      miniCtx.fillStyle = '#f59e0b';
+      for (const t of state.tents) { miniCtx.beginPath(); miniCtx.arc(t.x * scale, t.y * scale, 3, 0, Math.PI * 2); miniCtx.fill(); }
+      for (const v of state.villages) { miniCtx.beginPath(); miniCtx.arc(v.x * scale, v.y * scale, 4.5, 0, Math.PI * 2); miniCtx.fill(); }
+      if (!state.hornRelic.collected) { miniCtx.fillStyle = '#facc15'; miniCtx.beginPath(); miniCtx.arc(state.ruinsPos.x * scale, state.ruinsPos.y * scale, 3.8, 0, Math.PI * 2); miniCtx.fill(); }
+      miniCtx.fillStyle = '#a855f7'; miniCtx.beginPath(); miniCtx.arc(state.altarPos.x * scale, state.altarPos.y * scale, 4, 0, Math.PI * 2); miniCtx.fill();
+      miniCtx.fillStyle = '#e879f9'; miniCtx.beginPath(); miniCtx.arc(state.shard.x * scale, state.shard.y * scale, 3.2, 0, Math.PI * 2); miniCtx.fill();
+      if (!state.dragon.mounted) { miniCtx.fillStyle = '#fb7185'; miniCtx.beginPath(); miniCtx.arc(state.dragon.x * scale, state.dragon.y * scale, 3.4, 0, Math.PI * 2); miniCtx.fill(); }
+      miniCtx.fillStyle = '#5eead4'; miniCtx.beginPath(); miniCtx.arc(state.player.x * scale, state.player.y * scale, 3.6, 0, Math.PI * 2); miniCtx.fill();
+      miniCtx.strokeStyle = '#fff'; miniCtx.lineWidth = 1.2; miniCtx.stroke();
+    }
+
+    // ==================== MAIN LOOP ====================
+    function loop(ts) {
+      const dt = Math.min(0.05, (ts - lastTime) / 1000 || 0.016);
+      lastTime = ts;
+      update(dt);
+      drawWorld();
+      rafId = requestAnimationFrame(loop);
+    }
+
+    function startNewGame() {
+      if (rafId) cancelAnimationFrame(rafId);
+      state = createInitialState();
+      state.started = true;
+      elStartOverlay.classList.add('hidden');
+      elEndOverlay.classList.add('hidden');
+      closeAllModals();
+      updateHUD();
+      showToast('✍️ Z ile haritada rün çiz, F ile Ejderhana bin! Seviye atladıkça rünlü elitler uyanır.', 'gold');
+      lastTime = performance.now();
+      rafId = requestAnimationFrame(loop);
+    }
+
+    // ==================== INPUT LISTENERS ====================
+    window.addEventListener('keydown', (e) => {
+      if (!state || !state.started) return;
+      keys[e.code] = true;
+      if (e.code === 'KeyC' || e.code === 'KeyI' || e.code === 'Tab') { e.preventDefault(); openCrafting(!elCraftModal.classList.contains('open')); }
+      else if (e.code === 'KeyJ') { if (elJournalModal.classList.contains('open')) closeAllModals(); else openJournal(); }
+      else if (e.code === 'Escape') { if (!elLevelModal.classList.contains('open')) closeAllModals(); }
+      else if (!state.paused && !state.gameOver) {
+        if (e.code === 'Space') { e.preventDefault(); performDash(); }
+        else if (e.code === 'KeyE') performInteract();
+        else if (e.code === 'KeyF') toggleMount();
+        else if (e.code === 'KeyR') blowHorn();
+        else if (e.code === 'KeyQ') setGauntletMode('telekinesis');
+        else if (e.code === 'KeyZ') setGauntletMode('draw');
+        else if (e.code === 'KeyG') cycleElement();
+        else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') toggleDragonFlight();
+        else if (e.code >= 'Digit1' && e.code <= 'Digit9') useHotbarSlot(Number(e.code.replace('Digit', '')));
+      }
+    });
+
+    window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+    canvas.addEventListener('mousemove', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      mouse.x = e.clientX - rect.left; mouse.y = e.clientY - rect.top;
+    });
+
+    canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); AudioEngine.init(); handleRightClickAction(); });
+
+    canvas.addEventListener('mousedown', (e) => {
+      AudioEngine.init();
+      if (!state || !state.started || state.paused || state.gameOver) return;
+      if (e.button === 0) {
+        if (state.player.gauntletMode === 'draw' && !state.dragon.mounted) {
+          mouse.down = true;
+          startRuneDraw();
+        } else if (state.player.gauntletMode === 'telekinesis' && !state.dragon.mounted) {
+          handleTelekinesisLeftClick();
+        } else {
+          mouse.down = true;
+        }
+      }
+    });
+
+    window.addEventListener('mouseup', () => {
+      mouse.down = false;
+      if (state && state.runeDrawing.active) finishRuneDraw();
+    });
+
+    document.getElementById('hotbar').addEventListener('click', (e) => {
+      const slot = e.target.closest('.slot');
+      if (!slot || !state || !state.started || state.paused) return;
+      useHotbarSlot(Number(slot.dataset.slot));
+    });
+
+    elInteractPrompt.addEventListener('click', () => { if (state && state.started && !state.paused) performInteract(); });
+    elFlightToggleBtn.addEventListener('click', () => { if (state && state.started && !state.paused) toggleDragonFlight(); });
+    document.getElementById('craftOpenBtn').addEventListener('click', () => { if (state && state.started && !state.gameOver) openCrafting(!elCraftModal.classList.contains('open')); });
+    document.getElementById('journalOpenBtn').addEventListener('click', () => { if (state && state.started && !state.gameOver) openJournal(); });
+    document.getElementById('craftCloseBtn').addEventListener('click', closeAllModals);
+    document.getElementById('journalCloseBtn').addEventListener('click', closeAllModals);
+    document.getElementById('npcCloseBtn').addEventListener('click', closeAllModals);
+
+    document.getElementById('muteBtn').addEventListener('click', (e) => {
+      AudioEngine.muted = !AudioEngine.muted;
+      e.currentTarget.textContent = AudioEngine.muted ? '🔇 Sessiz' : '🔊 Ses';
+    });
+
+    document.getElementById('startGameBtn').addEventListener('click', () => { AudioEngine.init(); startNewGame(); });
+    document.getElementById('restartBtn').addEventListener('click', () => { AudioEngine.init(); startNewGame(); });
+    document.getElementById('continueBtn').addEventListener('click', () => { elEndOverlay.classList.add('hidden'); state.paused = false; });
+
+    // Mobile Touch Controls
+    const joyZone = document.getElementById('joystickZone'), joyKnob = document.getElementById('joystickKnob');
+    joyZone.addEventListener('touchstart', (e) => {
+      AudioEngine.init();
+      const t = e.changedTouches[0], rect = joyZone.getBoundingClientRect();
+      touchStick.active = true; touchStick.id = t.identifier;
+      touchStick.cx = rect.left + rect.width / 2; touchStick.cy = rect.top + rect.height / 2;
+    }, { passive: true });
+    joyZone.addEventListener('touchmove', (e) => {
+      for (const t of e.changedTouches) {
+        if (t.identifier === touchStick.id) {
+          const dx = t.clientX - touchStick.cx, dy = t.clientY - touchStick.cy;
+          const dist = Math.min(40, Math.hypot(dx, dy)), ang = Math.atan2(dy, dx);
+          touchStick.dx = (Math.cos(ang) * dist) / 40; touchStick.dy = (Math.sin(ang) * dist) / 40;
+          joyKnob.style.transform = `translate(${Math.cos(ang) * dist}px, ${Math.sin(ang) * dist}px)`;
+        }
+      }
+    }, { passive: true });
+    const resetStick = () => { touchStick.active = false; touchStick.dx = 0; touchStick.dy = 0; joyKnob.style.transform = 'translate(0px, 0px)'; };
+    joyZone.addEventListener('touchend', resetStick);
+    joyZone.addEventListener('touchcancel', resetStick);
+
+    document.getElementById('touchShootBtn').addEventListener('click', () => {
+      AudioEngine.init();
+      if (!state || !state.started) return;
+      if (state.player.gauntletMode === 'telekinesis' && !state.dragon.mounted) handleTelekinesisLeftClick();
+      else fireMagicGauntlets();
+    });
+    document.getElementById('touchDashBtn').addEventListener('click', () => { AudioEngine.init(); if (state && state.started) performDash(); });
+    document.getElementById('touchMountBtn').addEventListener('click', () => { AudioEngine.init(); if (state && state.started) toggleMount(); });
+    document.getElementById('touchHornBtn').addEventListener('click', () => { AudioEngine.init(); if (state && state.started) blowHorn(); });
+
+    window.addEventListener('load', () => {
+      state = createInitialState();
+      updateHUD();
+      drawWorld();
+    });
+  })();
+  </script>
+</body>
+</html>
